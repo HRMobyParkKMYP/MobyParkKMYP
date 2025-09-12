@@ -11,3 +11,5 @@ MAX_LOG_SIZE = 5 * 1024 * 1024
 
 UVICORN_HOST_IP = environment["API_HOST_IP"] 
 UVICORN_HOST_PORT = int(environment["API_HOST_PORT"])
+
+IBT = "a"

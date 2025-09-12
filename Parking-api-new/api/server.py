@@ -2,8 +2,8 @@ import asyncio
 import threading
 import uvicorn
 import constants
-from api.logger import Logger
-from api.apiroutes import Apiroutes
+from customlogger import Logger
+from apiroutes import Apiroutes, run
 
 class Main():
 
@@ -17,14 +17,14 @@ class Main():
 
     def runApi(self):
         self.logger.info("Starting API")
-        api = Apiroutes.run()  
+        api = run()  
         uvicorn.run(api, host=constants.UVICORN_HOST_IP, port=constants.UVICORN_HOST_PORT)
 
 
     async def main(self) -> None:
 
         try:
-            apiThread = threading.Thread(target=self.runApi, daemon=True)
+            apiThread = threading.Thread(target=self.runApi)
             apiThread.start()
 
         except Exception as e:
