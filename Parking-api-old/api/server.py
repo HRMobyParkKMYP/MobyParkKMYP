@@ -10,20 +10,37 @@ import session_calculator as sc
 class RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/register":
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
-            username = data.get("username")
-            password = data.get("password")
-            name = data.get("name")
-            hashed_password = hashlib.md5(password.encode()).hexdigest()
+            try:
+                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            except (json.JSONDecodeError, ValueError) as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Invalid JSON data")
+                return
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Bad request")
+                return
+            if not username or not password or not name:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Missing required fields: username, password, name")
+                return
             users = load_json('data/users.json')
+            if not isinstance(users, list):
+                users = []
             for user in users:
                 if username == user['username']:
-                    self.send_response(200)
+                    self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
                     self.wfile.write(b"Username already taken")
                     return
-            users.add({
+            users.append({
                 'username': username,
                 'password': hashed_password,
                 'name': name
@@ -36,9 +53,20 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 
         elif self.path == "/login":
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
-            username = data.get("username")
-            password = data.get("password")
+            try:
+                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            except (json.JSONDecodeError, ValueError) as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Invalid JSON data")
+                return
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Bad request")
+                return
             if not username or not password:
                 self.send_response(400)
                 self.send_header("Content-type", "application/json")
@@ -47,6 +75,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             hashed_password = hashlib.md5(password.encode()).hexdigest()
             users = load_json('data/users.json')
+            if not isinstance(users, list):
+                users = []
             for user in users:
                 if user.get("username") == username and user.get("password") == hashed_password:
                     token = str(uuid.uuid4())
@@ -56,16 +86,10 @@ class RequestHandler(BaseHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(json.dumps({"message": "User logged in", "session_token": token}).encode('utf-8'))
                     return
-                else:
-                    self.send_response(401)
-                    self.send_header("Content-type", "application/json")
-                    self.end_headers()
-                    self.wfile.write(b"Invalid credentials")
-                    return
             self.send_response(401)
             self.send_header("Content-type", "application/json")
             self.end_headers()
-            self.wfile.write(b"User not found")
+            self.wfile.write(b"Invalid credentials")
 
 
         elif self.path.startswith("/parking-lots"):
@@ -79,56 +103,69 @@ class RequestHandler(BaseHTTPRequestHandler):
             session_user = get_session(token)
             if 'sessions' in self.path:
                 lid = self.path.split("/")[2]
-                data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
-                sessions = load_json(f'data/pdata/p{lid}-sessions.json')
-                if self.path.endswith('start'):
-                    if 'licenseplate' not in data:
-                        self.send_response(401)
-                        self.send_header("Content-type", "application/json")
-                        self.end_headers()
-                        self.wfile.write(json.dumps({"error": "Require field missing", "field": 'licenseplate'}).encode("utf-8"))
-                        return
-                    filtered = {key: value for key, value in sessions.items() if value.get("licenseplate") == data['licenseplate'] and not value.get('stopped')}
-                    if len(filtered) > 0:
-                        self.send_response(401)
-                        self.send_header("Content-type", "application/json")
-                        self.end_headers()
-                        self.wfile.write(b'Cannot start a session when another sessions for this licesenplate is already started.')
-                        return 
-                    session = {
-                        "licenseplate": data['licenseplate'],
-                        "started": datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
-                        "stopped": None,
-                        "user": session_user["username"]
-                    }
-                    sessions[str(len(sessions) + 1)] = session
-                    save_data(f'data/pdata/p{lid}-sessions.json', sessions)
-                    self.send_response(200)
+                try:
+                    data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+                except (json.JSONDecodeError, ValueError) as e:
+                    self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(f"Session started for: {data['licenseplate']}".encode('utf-8'))
+                    self.wfile.write(b"Invalid JSON data")
+                    return
+                except Exception as e:
+                    self.send_response(400)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b"Bad request")
+                return
+            sessions = load_json(f'data/pdata/p{lid}-sessions.json')
+            if self.path.endswith('start'):
+                if 'licenseplate' not in data:
+                    self.send_response(400)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "Required field missing", "field": 'licenseplate'}).encode("utf-8"))
+                    return
+                filtered = {key: value for key, value in sessions.items() if value.get("licenseplate") == data['licenseplate'] and not value.get('stopped')}
+                if len(filtered) > 0:
+                    self.send_response(409)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b'Cannot start a session when another session for this licenseplate is already started.')
+                    return 
+                session = {
+                    "licenseplate": data['licenseplate'],
+                    "started": datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+                    "stopped": None,
+                    "user": session_user["username"]
+                }
+                sessions[str(len(sessions) + 1)] = session
+                save_data(f'data/pdata/p{lid}-sessions.json', sessions)
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(f"Session started for: {data['licenseplate']}".encode('utf-8'))
 
-                elif self.path.endswith('stop'):
-                    if 'licenseplate' not in data:
-                        self.send_response(401)
-                        self.send_header("Content-type", "application/json")
-                        self.end_headers()
-                        self.wfile.write(json.dumps({"error": "Require field missing", "field": 'licenseplate'}).encode("utf-8"))
-                        return
-                    filtered = {key: value for key, value in sessions.items() if value.get("licenseplate") == data['licenseplate'] and not value.get('stopped')}
-                    if len(filtered) < 0:
-                        self.send_response(401)
-                        self.send_header("Content-type", "application/json")
-                        self.end_headers()
-                        self.wfile.write(b'Cannot stop a session when there is no session for this licesenplate.')
-                        return
-                    sid = next(iter(filtered))
-                    sessions[sid]["stopped"] = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-                    save_data(f'data/pdata/p{lid}-sessions.json', sessions)
-                    self.send_response(200)
+            elif self.path.endswith('stop'):
+                if 'licenseplate' not in data:
+                    self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(f"Session stopped for: {data['licenseplate']}".encode('utf-8'))
+                    self.wfile.write(json.dumps({"error": "Required field missing", "field": 'licenseplate'}).encode("utf-8"))
+                    return
+                filtered = {key: value for key, value in sessions.items() if value.get("licenseplate") == data['licenseplate'] and not value.get('stopped')}
+                if len(filtered) == 0:
+                    self.send_response(404)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b'Cannot stop a session when there is no session for this licenseplate.')
+                    return
+                sid = next(iter(filtered))
+                sessions[sid]["stopped"] = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+                save_data(f'data/pdata/p{lid}-sessions.json', sessions)
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(f"Session stopped for: {data['licenseplate']}".encode('utf-8'))
 
             else:
                 if not 'ADMIN' == session_user.get('role'):
@@ -137,7 +174,20 @@ class RequestHandler(BaseHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(b"Access denied")
                     return
-                data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+                try:
+                    data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+                except (json.JSONDecodeError, ValueError) as e:
+                    self.send_response(400)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b"Invalid JSON data")
+                    return
+                except Exception as e:
+                    self.send_response(400)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b"Bad request")
+                    return
                 parking_lots = load_parking_lot_data()
                 new_lid = str(len(parking_lots) + 1)
                 parking_lots[new_lid] = data
@@ -157,16 +207,29 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"Unauthorized: Invalid or missing session token")
                 return
             session_user = get_session(token)
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            try:
+                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            except (json.JSONDecodeError, ValueError) as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Invalid JSON data")
+                return
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Bad request")
+                return
             reservations = load_reservation_data()
             parking_lots = load_parking_lot_data()
             rid = str(len(reservations) + 1)
             for field in ["licenseplate", "startdate", "enddate", "parkinglot"]:
-                if not field in data:
-                    self.send_response(401)
+                if field not in data:
+                    self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(json.dumps({"error": "Require field missing", "field": field}).encode("utf-8"))
+                    self.wfile.write(json.dumps({"error": "Required field missing", "field": field}).encode("utf-8"))
                     return
             if data.get("parkinglot", -1) not in parking_lots:
                 self.send_response(404)
@@ -175,11 +238,11 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": "Parking lot not found", "field": "parkinglot"}).encode("utf-8"))
                 return
             if 'ADMIN' == session_user.get('role'):
-                if not "user" in data:
-                    self.send_response(401)
+                if "user" not in data:
+                    self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(json.dumps({"error": "Require field missing", "field": "user"}).encode("utf-8"))
+                    self.wfile.write(json.dumps({"error": "Required field missing", "field": "user"}).encode("utf-8"))
                     return
             else:
                 data["user"] = session_user["username"]
@@ -203,19 +266,32 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"Unauthorized: Invalid or missing session token")
                 return
             session_user = get_session(token)
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            try:
+                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            except (json.JSONDecodeError, ValueError) as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Invalid JSON data")
+                return
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Bad request")
+                return
             vehicles = load_json("data/vehicles.json")
             uvehicles = vehicles.get(session_user["username"], {})
             for field in ["name", "license_plate"]:
-                if not field in data:
-                    self.send_response(401)
+                if field not in data:
+                    self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(json.dumps({"error": "Require field missing", "field": field}).encode("utf-8"))
+                    self.wfile.write(json.dumps({"error": "Required field missing", "field": field}).encode("utf-8"))
                     return
             lid = data["license_plate"].replace("-", "")
             if lid in uvehicles:
-                self.send_response(401)
+                self.send_response(409)
                 self.send_header("Content-type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": "Vehicle already exists", "data": uvehicles.get(lid)}).encode("utf-8"))
@@ -245,19 +321,32 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"Unauthorized: Invalid or missing session token")
                 return
             session_user = get_session(token)
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            try:
+                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            except (json.JSONDecodeError, ValueError) as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Invalid JSON data")
+                return
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Bad request")
+                return
             vehicles = load_json("data/vehicles.json")
             uvehicles = vehicles.get(session_user["username"], {})
             for field in ["parkinglot"]:
-                if not field in data:
-                    self.send_response(401)
+                if field not in data:
+                    self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(json.dumps({"error": "Require field missing", "field": field}).encode("utf-8"))
+                    self.wfile.write(json.dumps({"error": "Required field missing", "field": field}).encode("utf-8"))
                     return
             lid = self.path.replace("/vehicles/", "").replace("/entry", "")
             if lid not in uvehicles:
-                self.send_response(401)
+                self.send_response(404)
                 self.send_header("Content-type", "application/json")
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": "Vehicle does not exist", "data": lid}).encode("utf-8"))
@@ -288,11 +377,11 @@ class RequestHandler(BaseHTTPRequestHandler):
                     self.wfile.write(b"Access denied")
                     return 
                 for field in ["amount"]:
-                    if not field in data:
-                        self.send_response(401)
+                    if field not in data:
+                        self.send_response(400)
                         self.send_header("Content-type", "application/json")
                         self.end_headers()
-                        self.wfile.write(json.dumps({"error": "Require field missing", "field": field}).encode("utf-8"))
+                        self.wfile.write(json.dumps({"error": "Required field missing", "field": field}).encode("utf-8"))
                         return
                 payment = {
                     "transaction": data["transaction"] if data.get("transaction") else sc.generate_payment_hash(session_user["username"], str(datetime.now())),
@@ -305,11 +394,11 @@ class RequestHandler(BaseHTTPRequestHandler):
                 }
             else:
                 for field in ["transaction", "amount"]:
-                    if not field in data:
-                        self.send_response(401)
+                    if field not in data:
+                        self.send_response(400)
                         self.send_header("Content-type", "application/json")
                         self.end_headers()
-                        self.wfile.write(json.dumps({"error": "Require field missing", "field": field}).encode("utf-8"))
+                        self.wfile.write(json.dumps({"error": "Required field missing", "field": field}).encode("utf-8"))
                         return
                 payment = {
                     "transaction": data.get("transaction"),
@@ -347,7 +436,20 @@ class RequestHandler(BaseHTTPRequestHandler):
                         self.end_headers()
                         self.wfile.write(b"Access denied")
                         return
-                    data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+                try:
+                    data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+                except (json.JSONDecodeError, ValueError) as e:
+                    self.send_response(400)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b"Invalid JSON data")
+                    return
+                except Exception as e:
+                    self.send_response(400)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(b"Bad request")
+                    return
                     parking_lots[lid] = data
                     save_parking_lot_data(parking_lots)
                     self.send_response(200)
@@ -371,9 +473,22 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"Unauthorized: Invalid or missing session token")
                 return
             session_user = get_session(token)
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            try:
+                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            except (json.JSONDecodeError, ValueError) as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Invalid JSON data")
+                return
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Bad request")
+                return
             data["username"] = session_user["username"]
-            if data["password"]:
+            if data.get("password"):
                 data["password"] = hashlib.md5(data["password"].encode()).hexdigest()
             save_user_data(data)
             self.send_response(200)
@@ -383,7 +498,20 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 
         elif self.path.startswith("/reservations/"):
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            try:
+                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            except (json.JSONDecodeError, ValueError) as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Invalid JSON data")
+                return
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Bad request")
+                return
             reservations = load_reservation_data()
             rid = self.path.replace("/reservations/", "")
             if rid:
@@ -397,18 +525,18 @@ class RequestHandler(BaseHTTPRequestHandler):
                         return
                     session_user = get_session(token)
                     for field in ["licenseplate", "startdate", "enddate", "parkinglot"]:
-                        if not field in data:
-                            self.send_response(401)
+                        if field not in data:
+                            self.send_response(400)
                             self.send_header("Content-type", "application/json")
                             self.end_headers()
-                            self.wfile.write(json.dumps({"error": "Require field missing", "field": field}).encode("utf-8"))
+                            self.wfile.write(json.dumps({"error": "Required field missing", "field": field}).encode("utf-8"))
                             return
                     if 'ADMIN' == session_user.get('role'):
-                        if not "user" in data:
-                            self.send_response(401)
+                        if "user" not in data:
+                            self.send_response(400)
                             self.send_header("Content-type", "application/json")
                             self.end_headers()
-                            self.wfile.write(json.dumps({"error": "Require field missing", "field": "user"}).encode("utf-8"))
+                            self.wfile.write(json.dumps({"error": "Required field missing", "field": "user"}).encode("utf-8"))
                             return
                     else:
                         data["user"] = session_user["username"]
@@ -436,15 +564,28 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"Unauthorized: Invalid or missing session token")
                 return
             session_user = get_session(token)
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            try:
+                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            except (json.JSONDecodeError, ValueError) as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Invalid JSON data")
+                return
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Bad request")
+                return
             vehicles = load_json("data/vehicles.json")
             uvehicles = vehicles.get(session_user["username"], {})
             for field in ["name"]:
-                if not field in data:
-                    self.send_response(401)
+                if field not in data:
+                    self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(json.dumps({"error": "Require field missing", "field": field}).encode("utf-8"))
+                    self.wfile.write(json.dumps({"error": "Required field missing", "field": field}).encode("utf-8"))
                     return
             lid = self.path.replace("/vehicles/", "")
             if not uvehicles:
@@ -476,15 +617,28 @@ class RequestHandler(BaseHTTPRequestHandler):
             pid = self.path.replace("/payments/", "")
             payments = load_payment_data()
             session_user = get_session(token)
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            try:
+                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            except (json.JSONDecodeError, ValueError) as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Invalid JSON data")
+                return
+            except Exception as e:
+                self.send_response(400)
+                self.send_header("Content-type", "application/json")
+                self.end_headers()
+                self.wfile.write(b"Bad request")
+                return
             payment = next(p for p in payments if p["transaction"] == pid)
             if payment:
                 for field in ["t_data", "validation"]:
-                    if not field in data:
-                        self.send_response(401)
+                    if field not in data:
+                        self.send_response(400)
                         self.send_header("Content-type", "application/json")
                         self.end_headers()
-                        self.wfile.write(json.dumps({"error": "Require field missing", "field": field}).encode("utf-8"))
+                        self.wfile.write(json.dumps({"error": "Required field missing", "field": field}).encode("utf-8"))
                         return
                 if payment["hash"] != data.get("validation"):
                     self.send_response(401)
@@ -573,15 +727,15 @@ class RequestHandler(BaseHTTPRequestHandler):
                         return
                     session_user = get_session(token)
                     if "ADMIN" == session_user.get('role') or session_user["username"] == reservations[rid].get("user"):
+                        pid = reservations[rid]["parkinglot"]
                         del reservations[rid]
+                        parking_lots[pid]["reserved"] -= 1
                     else:
                         self.send_response(403)
                         self.send_header("Content-type", "application/json")
                         self.end_headers()
                         self.wfile.write(b"Access denied")
                         return
-                    pid = reservations[rid]["parkinglot"]
-                    parking_lots[pid]["reserved"] -= 1
                     save_reservation_data(reservations)
                     save_parking_lot_data(parking_lots)
                     self.send_response(200)
@@ -611,7 +765,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 vehicles = load_json("data/vehicles.json")
                 uvehicles = vehicles.get(session_user["username"], {})
                 if lid not in uvehicles:
-                    self.send_response(403)
+                    self.send_response(404)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
                     self.wfile.write(b"Vehicle not found!")
@@ -674,13 +828,14 @@ class RequestHandler(BaseHTTPRequestHandler):
                         self.end_headers()
                         self.wfile.write(b"Unauthorized: Invalid or missing session token")
                         return
+                    session_user = get_session(token)
                     sessions = load_json(f'data/pdata/p{lid}-sessions.json')
                     rsessions = []
                     if self.path.endswith('/sessions'):
                         if "ADMIN" == session_user.get('role'):
                             rsessions = sessions
                         else:
-                            for session in sessions:
+                            for sid, session in sessions.items():
                                 if session['user'] == session_user['username']:
                                     rsessions.append(session)
                         self.send_response(200)
@@ -756,7 +911,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             payments = []
             session_user = get_session(token)
             for payment in load_payment_data():
-                if payment["username"] == session_user["username"]:
+                if payment.get("initiator") == session_user["username"] or payment.get("processed_by") == session_user["username"]:
                     payments.append(payment)
             self.send_response(200)
             self.send_header("Content-type", "application/json")
@@ -783,7 +938,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 self.wfile.write(b"Access denied")
                 return
             for payment in load_payment_data():
-                if payment["username"] == session_user["username"]:
+                if payment.get("initiator") == user or payment.get("processed_by") == user:
                     payments.append(payment)
             self.send_response(200)
             self.send_header("Content-type", "application/json")
