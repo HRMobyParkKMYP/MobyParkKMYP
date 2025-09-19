@@ -10,6 +10,13 @@ import session_calculator as sc
 class RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/register":
+
+            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            username = data.get("username")
+            password = data.get("password")
+            name = data.get("name")
+            hashed_password = hashlib.md5(password.encode()).hexdigest()
+            
             try:
                 data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
             except (json.JSONDecodeError, ValueError) as e:
