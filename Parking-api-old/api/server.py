@@ -3,56 +3,57 @@ import hashlib
 import uuid
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from storage_utils import load_json, save_data, save_user_data, load_parking_lot_data, save_parking_lot_data, save_reservation_data, load_reservation_data, load_payment_data, save_payment_data
-from session_manager import add_session, remove_session, get_session
-import session_calculator as sc
+from api.storage_utils import load_json, save_data, save_user_data, load_parking_lot_data, save_parking_lot_data, save_reservation_data, load_reservation_data, load_payment_data, save_payment_data
+from api.session_manager import add_session, remove_session, get_session
+import api.session_calculator as sc
 
 class RequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path == "/register":
-
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
-            username = data.get("username")
-            password = data.get("password")
-            name = data.get("name")
-            hashed_password = hashlib.md5(password.encode()).hexdigest()
-            
             try:
-                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
-            except (json.JSONDecodeError, ValueError) as e:
+                content_length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(content_length)
+                data = json.loads(body)
+            except (json.JSONDecodeError, ValueError):
                 self.send_response(400)
                 self.send_header("Content-type", "application/json")
                 self.end_headers()
                 self.wfile.write(b"Invalid JSON data")
                 return
-            except Exception as e:
+            except Exception:
                 self.send_response(400)
                 self.send_header("Content-type", "application/json")
                 self.end_headers()
                 self.wfile.write(b"Bad request")
                 return
+
+            username = data.get("username")
+            password = data.get("password")
+            name = data.get("name")
+
             if not username or not password or not name:
                 self.send_response(400)
                 self.send_header("Content-type", "application/json")
                 self.end_headers()
                 self.wfile.write(b"Missing required fields: username, password, name")
                 return
-            users = load_json('data/users.json')
+
+            hashed_password = hashlib.md5(password.encode()).hexdigest()
+            users = load_json("data/users.json")
             if not isinstance(users, list):
                 users = []
+
             for user in users:
-                if username == user['username']:
+                if username == user.get("username"):
                     self.send_response(400)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
                     self.wfile.write(b"Username already taken")
                     return
-            users.append({
-                'username': username,
-                'password': hashed_password,
-                'name': name
-            })
+
+            users.append({"username": username, "password": hashed_password, "name": name})
             save_user_data(users)
+
             self.send_response(201)
             self.send_header("Content-type", "application/json")
             self.end_headers()
@@ -61,29 +62,37 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         elif self.path == "/login":
             try:
-                data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
-            except (json.JSONDecodeError, ValueError) as e:
+                content_length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(content_length)
+                data = json.loads(body)
+            except (json.JSONDecodeError, ValueError):
                 self.send_response(400)
                 self.send_header("Content-type", "application/json")
                 self.end_headers()
                 self.wfile.write(b"Invalid JSON data")
                 return
-            except Exception as e:
+            except Exception:
                 self.send_response(400)
                 self.send_header("Content-type", "application/json")
                 self.end_headers()
                 self.wfile.write(b"Bad request")
                 return
+
+            username = data.get("username")
+            password = data.get("password")
+
             if not username or not password:
                 self.send_response(400)
                 self.send_header("Content-type", "application/json")
                 self.end_headers()
                 self.wfile.write(b"Missing credentials")
                 return
+
             hashed_password = hashlib.md5(password.encode()).hexdigest()
-            users = load_json('data/users.json')
+            users = load_json("data/users.json")
             if not isinstance(users, list):
                 users = []
+
             for user in users:
                 if user.get("username") == username and user.get("password") == hashed_password:
                     token = str(uuid.uuid4())
@@ -91,8 +100,11 @@ class RequestHandler(BaseHTTPRequestHandler):
                     self.send_response(200)
                     self.send_header("Content-type", "application/json")
                     self.end_headers()
-                    self.wfile.write(json.dumps({"message": "User logged in", "session_token": token}).encode('utf-8'))
+                    self.wfile.write(
+                        json.dumps({"message": "User logged in", "session_token": token}).encode("utf-8")
+                    )
                     return
+
             self.send_response(401)
             self.send_header("Content-type", "application/json")
             self.end_headers()
@@ -1081,6 +1093,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 return
             
 
-server = HTTPServer(('localhost', 8000), RequestHandler)
-print("Server running on http://localhost:8000")
-server.serve_forever()
+if __name__ == "__main__":
+    server = HTTPServer(('localhost', 8000), RequestHandler)
+    print("Server running on http://localhost:8000")
+    server.serve_forever()
