@@ -1,21 +1,20 @@
 import json
-import hashlib
-import uuid
-from datetime import datetime
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from storage_utils import load_json, save_data, save_user_data, load_parking_lot_data, save_parking_lot_data, save_reservation_data, load_reservation_data, load_payment_data, save_payment_data
-from session_manager import add_session, remove_session, get_session
+from storage_utils import load_json, load_parking_lot_data
+from session_manager import get_session
 import session_calculator as sc
+from endpoints.baseEndpoints import BaseEndpoint
 
-class BillingHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == "/billing":
-            token = self.headers.get('Authorization')
+class BillingHandler(BaseEndpoint):
+    def handle(self, request_handler, method):
+        path, send, send_header, end_headers, w = self.setup(request_handler, method)
+
+        if method == "GET" and path == "/billing":
+            token = request_handler.headers.get('Authorization')
             if not token or not get_session(token):
-                self.send_response(401)
-                self.send_header("Content-type", "application/json")
-                self.end_headers()
-                self.wfile.write(b"Unauthorized: Invalid or missing session token")
+                send(401)
+                send_header("Content-type", "application/json")
+                end_headers()
+                w.write(b"Unauthorized: Invalid or missing session token")
                 return
             data = []
             session_user = get_session(token)
@@ -33,29 +32,29 @@ class BillingHandler(BaseHTTPRequestHandler):
                             "payed": payed,
                             "balance": amount - payed
                         })
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(data, default=str).encode("utf-8"))
+            send(200)
+            send_header("Content-type", "application/json")
+            end_headers()
+            w.write(json.dumps(data, default=str).encode("utf-8"))
             return
         
 
-        elif self.path.startswith("/billing/"):
-            token = self.headers.get('Authorization')
+        if method == "GET" and path.startswith("/billing/"):
+            token = request_handler.headers.get('Authorization')
             if not token or not get_session(token):
-                self.send_response(401)
-                self.send_header("Content-type", "application/json")
-                self.end_headers()
-                self.wfile.write(b"Unauthorized: Invalid or missing session token")
+                send(401)
+                send_header("Content-type", "application/json")
+                end_headers()
+                w.write(b"Unauthorized: Invalid or missing session token")
                 return
             data = []
             session_user = get_session(token)
-            user = self.path.replace("/billing/", "")
+            user = path.replace("/billing/", "")
             if not "ADMIN" == session_user.get('role'):
-                self.send_response(403)
-                self.send_header("Content-type", "application/json")
-                self.end_headers()
-                self.wfile.write(b"Access denied")
+                send(403)
+                send_header("Content-type", "application/json")
+                end_headers()
+                w.write(b"Access denied")
                 return
             for pid, parkinglot in load_parking_lot_data().items():
                 for sid, session in load_json(f'data/pdata/p{pid}-sessions.json').items():
@@ -71,8 +70,8 @@ class BillingHandler(BaseHTTPRequestHandler):
                             "payed": payed,
                             "balance": amount - payed
                         })
-            self.send_response(200)
-            self.send_header("Content-type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps(data, default=str).encode("utf-8"))
+            send(200)
+            send_header("Content-type", "application/json")
+            end_headers()
+            w.write(json.dumps(data, default=str).encode("utf-8"))
             return
