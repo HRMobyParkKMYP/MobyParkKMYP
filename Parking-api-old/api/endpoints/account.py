@@ -7,7 +7,7 @@ from endpoints.baseEndpoints import BaseEndpoint
 
 class AccountHandler(BaseEndpoint):
     def handle(self, request_handler, method):
-        path, send, send_header, end_headers, w = self.setup(request_handler, method)
+        path, send, send_header, end_headers, w = self.setup(request_handler)
 
         if method == "POST" and path == "/register":
             data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
@@ -18,25 +18,27 @@ class AccountHandler(BaseEndpoint):
             users = load_json('data/users.json')
             for user in users:
                 if username == user['username']:
-                    send(200)
-                    send_header("Content-type", "application/json")
-                    end_headers()
-                    w.write(b"Username already taken")
+                    request_handler.send_response(200)
+                    request_handler.send_header("Content-Type", "application/json")
+                    request_handler.end_headers()
+                    request_handler.wfile.write(b'{"error": "Username already taken"}')
                     return
-            users.add({
+
+            users.append({
                 'username': username,
                 'password': hashed_password,
                 'name': name
             })
             save_user_data(users)
-            send(201)
-            send_header("Content-type", "application/json")
-            end_headers()
-            w.write(b"User created")
+
+            request_handler.send_response(201)
+            request_handler.send_header("Content-Type", "application/json")
+            request_handler.end_headers()
+            request_handler.wfile.write(b'{"message": "User created"}')
             return
 
         if method == "POST" and path == "/login":
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
             username = data.get("username")
             password = data.get("password")
             if not username or not password:

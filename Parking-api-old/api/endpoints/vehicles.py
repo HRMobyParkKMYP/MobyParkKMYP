@@ -7,6 +7,8 @@ from endpoints.baseEndpoints import BaseEndpoint
 class VehicleHandler(BaseEndpoint):
     def handle(self, request_handler, method):
         path, send, send_header, end_headers, w = self.setup(request_handler, method)
+
+        # POST /vehicles voegt een nieuw voertuig toe aan users account
         if method == "POST" and path == "/vehicles":
             token = request_handler.headers.get('Authorization')
             if not token or not get_session(token):
@@ -16,9 +18,10 @@ class VehicleHandler(BaseEndpoint):
                 w.write(b"Unauthorized: Invalid or missing session token")
                 return
             session_user = get_session(token)
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
             vehicles = load_json("data/vehicles.json")
             uvehicles = vehicles.get(session_user["username"], {})
+            # Checkt of verplichte velden aanwezig zijn
             for field in ["name", "license_plate"]:
                 if not field in data:
                     send(401)
@@ -27,12 +30,14 @@ class VehicleHandler(BaseEndpoint):
                     w.write(json.dumps({"error": "Require field missing", "field": field}).encode("utf-8"))
                     return
             lid = data["license_plate"].replace("-", "")
+            # Checkt of voertuig al bestaat
             if lid in uvehicles:
                 send(401)
                 send_header("Content-type", "application/json")
                 end_headers()
                 w.write(json.dumps({"error": "Vehicle already exists", "data": uvehicles.get(lid)}).encode("utf-8"))
                 return
+            # Voegt voertuig toe aan de gebruikerslijst
             if not uvehicles:
                 vehicles[session_user["username"]] = {}
             vehicles[session_user["username"]][lid] = {
@@ -49,7 +54,7 @@ class VehicleHandler(BaseEndpoint):
             return
         
         if method == "POST" and path.startswith("/vehicles/"):
-            token = self.headers.get('Authorization')
+            token = request_handler.headers.get('Authorization')
             if not token or not get_session(token):
                 send(401)
                 send_header("Content-type", "application/json")
@@ -57,7 +62,7 @@ class VehicleHandler(BaseEndpoint):
                 w.write(b"Unauthorized: Invalid or missing session token")
                 return
             session_user = get_session(token)
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
             vehicles = load_json("data/vehicles.json")
             uvehicles = vehicles.get(session_user["username"], {})
             for field in ["parkinglot"]:
@@ -81,7 +86,7 @@ class VehicleHandler(BaseEndpoint):
             return
         
         if method == "PUT" and path.startswith("/vehicles/"):
-            token = self.headers.get('Authorization')
+            token = request_handler.headers.get('Authorization')
             if not token or not get_session(token):
                 send(401)
                 send_header("Content-type", "application/json")
@@ -89,7 +94,7 @@ class VehicleHandler(BaseEndpoint):
                 w.write(b"Unauthorized: Invalid or missing session token")
                 return
             session_user = get_session(token)
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
             vehicles = load_json("data/vehicles.json")
             uvehicles = vehicles.get(session_user["username"], {})
             for field in ["name"]:
@@ -121,7 +126,7 @@ class VehicleHandler(BaseEndpoint):
         if method == "DELETE" and path.startswith("/vehicles/"):
             lid = path.replace("/vehicles/", "")
             if lid:
-                token = self.headers.get('Authorization')
+                token = request_handler.headers.get('Authorization')
                 if not token or not get_session(token):
                     send(401)
                     send_header("Content-type", "application/json")
@@ -146,7 +151,7 @@ class VehicleHandler(BaseEndpoint):
                 return
             
         if method == "GET" and path.startswith("/vehicles"):
-            token = self.headers.get('Authorization')
+            token = request_handler.headers.get('Authorization')
             if not token or not get_session(token):
                 send(401)
                 send_header("Content-type", "application/json")
@@ -196,8 +201,8 @@ class VehicleHandler(BaseEndpoint):
                         end_headers()
                         w.write(b"User not found")
                         return
-                send(200)
-                send_header("Content-type", "application/json")
-                end_headers()
-                w.write(json.dumps(vehicles.get(user, {}), default=str).encode("utf-8"))
-                return
+                    send(200)
+                    send_header("Content-type", "application/json")
+                    end_headers()
+                    w.write(json.dumps(vehicles.get(user, {}), default=str).encode("utf-8"))
+                    return

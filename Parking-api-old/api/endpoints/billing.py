@@ -6,7 +6,7 @@ from endpoints.baseEndpoints import BaseEndpoint
 
 class BillingHandler(BaseEndpoint):
     def handle(self, request_handler, method):
-        path, send, send_header, end_headers, w = self.setup(request_handler, method)
+        path, send, send_header, end_headers, w = self.setup(request_handler)
 
         if method == "GET" and path == "/billing":
             token = request_handler.headers.get('Authorization')
