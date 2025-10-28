@@ -10,7 +10,7 @@ class AccountHandler(BaseEndpoint):
         path, send, send_header, end_headers, w = self.setup(request_handler)
 
         if method == "POST" and path == "/register":
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
             username = data.get("username")
             password = data.get("password")
             name = data.get("name")
@@ -53,21 +53,17 @@ class AccountHandler(BaseEndpoint):
                 if user.get("username") == username and user.get("password") == hashed_password:
                     token = str(uuid.uuid4())
                     add_session(token, user)
-                    send(200)
-                    send_header("Content-type", "application/json")
-                    end_headers()
-                    w.write(json.dumps({"message": "User logged in", "session_token": token}).encode('utf-8'))
+                    request_handler.send_response(200)
+                    request_handler.send_header("Content-Type", "application/json")
+                    request_handler.end_headers()
+                    response = json.dumps({"message": "User logged in", "session_token": token}).encode("utf-8")
+                    request_handler.wfile.write(response)
                     return
-                else:
-                    send(401)
-                    send_header("Content-type", "application/json")
-                    end_headers()
-                    w.write(b"Invalid credentials")
-                    return
-            send(401)
-            send_header("Content-type", "application/json")
-            end_headers()
-            w.write(b"User not found")
+
+            request_handler.send_response(401)
+            request_handler.send_header("Content-Type", "application/json")
+            request_handler.end_headers()
+            request_handler.wfile.write(b'{"error": "Invalid credentials"}')
             return
 
         if method == "GET" and path == "/logout":
