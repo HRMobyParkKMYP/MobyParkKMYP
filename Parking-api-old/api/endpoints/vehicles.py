@@ -6,7 +6,7 @@ from endpoints.baseEndpoints import BaseEndpoint
 
 class VehicleHandler(BaseEndpoint):
     def handle(self, request_handler, method):
-        path, send, send_header, end_headers, w = self.setup(request_handler, method)
+        path, send, send_header, end_headers, w = self.setup(request_handler)
 
         # POST /vehicles voegt een nieuw voertuig toe aan users account
         if method == "POST" and path == "/vehicles":
@@ -20,7 +20,7 @@ class VehicleHandler(BaseEndpoint):
             session_user = get_session(token)
             data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
             vehicles = load_json("data/vehicles.json")
-            uvehicles = vehicles.get(session_user["username"], {})
+            uvehicles = [v for v in vehicles if v.get("user_id") == session_user.get("id")]
             # Checkt of verplichte velden aanwezig zijn
             for field in ["name", "license_plate"]:
                 if not field in data:
@@ -38,14 +38,15 @@ class VehicleHandler(BaseEndpoint):
                 w.write(json.dumps({"error": "Vehicle already exists", "data": uvehicles.get(lid)}).encode("utf-8"))
                 return
             # Voegt voertuig toe aan de gebruikerslijst
-            if not uvehicles:
-                vehicles[session_user["username"]] = {}
-            vehicles[session_user["username"]][lid] = {
-                "licenseplate": data["license_plate"],
+            new_vehicle = {
+                "id": str(len(vehicles) + 1),
+                "user_id": session_user.get("id"),
+                "license_plate": data["license_plate"],
                 "name": data["name"],
-                "created_at": datetime.now(),
-                "updated_at": datetime.now()
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
+            vehicles.append(new_vehicle)
             save_data("data/vehicles.json", vehicles)
             send(201)
             send_header("Content-type", "application/json")
