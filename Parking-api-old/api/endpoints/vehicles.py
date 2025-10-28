@@ -53,7 +53,8 @@ class VehicleHandler(BaseEndpoint):
             end_headers()
             w.write(json.dumps({"status": "Success", "vehicle": data}).encode("utf-8"))
             return
-        
+
+        # POST /vehicles/<id>/entry registreert de entry tot een parkeerplaats van een voertuig
         if method == "POST" and path.startswith("/vehicles/"):
             token = request_handler.headers.get('Authorization')
             if not token or not get_session(token):
@@ -65,7 +66,8 @@ class VehicleHandler(BaseEndpoint):
             session_user = get_session(token)
             data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
             vehicles = load_json("data/vehicles.json")
-            uvehicles = vehicles.get(session_user["username"], {})
+            uvehicles = [v for v in vehicles if v.get("user_id") == session_user.get("id")]
+            # Checkt of verplichte velden aanwezig zijn
             for field in ["parkinglot"]:
                 if not field in data:
                     send(401)
@@ -74,12 +76,14 @@ class VehicleHandler(BaseEndpoint):
                     w.write(json.dumps({"error": "Require field missing", "field": field}).encode("utf-8"))
                     return
             lid = path.replace("/vehicles/", "").replace("/entry", "")
+            # Checkt of voertuig bestaat
             if lid not in uvehicles:
                 send(401)
                 send_header("Content-type", "application/json")
                 end_headers()
                 w.write(json.dumps({"error": "Vehicle does not exist", "data": lid}).encode("utf-8"))
                 return
+            # Registreert de entry
             send(200)
             send_header("Content-type", "application/json")
             end_headers()
