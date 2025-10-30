@@ -206,8 +206,9 @@ class VehicleHandler(BaseEndpoint):
                         end_headers()
                         w.write(b"User not found")
                         return
+                    user_vehicles = [v for v in vehicles if v.get("user_id") == session_user.get("id")]
                     send(200)
                     send_header("Content-type", "application/json")
                     end_headers()
-                    w.write(json.dumps(vehicles.get(user, {}), default=str).encode("utf-8"))
+                    w.write(json.dumps(user_vehicles, default=str).encode("utf-8"))
                     return
