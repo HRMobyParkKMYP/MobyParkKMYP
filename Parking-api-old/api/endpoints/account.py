@@ -1,6 +1,7 @@
 import json
 import hashlib
 import uuid
+from datetime import datetime
 from storage_utils import load_json, save_user_data
 from session_manager import add_session, remove_session, get_session
 from endpoints.baseEndpoints import BaseEndpoint
@@ -8,6 +9,9 @@ from endpoints.baseEndpoints import BaseEndpoint
 class AccountHandler(BaseEndpoint):
     def handle(self, request_handler, method):
         path, send, send_header, end_headers, w = self.setup(request_handler)
+
+        #[{"id":"1","username":"cindy.leenders42","password":"6b37d1ec969838d29cb611deaff50a6b","name":"Cindy Leenders",
+        #"email":"cindyleenders@upcmail.nl","phone":"+310792215694","role":"USER","created_at":"2017-10-06","birth_year":1937,"active":true}
 
         if method == "POST" and path == "/register":
             data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
@@ -25,9 +29,12 @@ class AccountHandler(BaseEndpoint):
                     return
 
             users.append({
+                'id': str(len(users) + 1),
                 'username': username,
                 'password': hashed_password,
-                'name': name
+                'name': name,
+                'role': 'USER',
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
             save_user_data(users)
 
