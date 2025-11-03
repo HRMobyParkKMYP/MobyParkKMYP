@@ -1,7 +1,6 @@
 import pytest
 import requests
 import json
-from storage_utils import load_json, save_data
 
 BASE_URL = "http://localhost:8000"
 
