@@ -1,6 +1,7 @@
 import pytest
 import requests
 import json
+from storage_utils import load_json, save_data
 
 BASE_URL = "http://localhost:8000"
 
@@ -269,3 +270,60 @@ def test_vehicle_delete_other_user_forbidden(register_and_login):
     delete = requests.delete(f"{BASE_URL}/vehicles/{vehicle_id}",
                              headers={"Authorization": token2})
     assert delete.status_code in (403, 404)
+
+#GET /vehicles tests
+def test_get_vehicles_success(register_and_login):
+    # 1. Succesvolle opvraging van voertuigenlijst
+    token = register_and_login("emma", "geheim", "Emma de Vries")
+
+    # Voeg voertuigen toe
+    requests.post(f"{BASE_URL}/vehicles",
+                  headers={"Authorization": token},
+                  json={"name": "Honda Civic", "license_plate": "GET-123"})
+    requests.post(f"{BASE_URL}/vehicles",
+                  headers={"Authorization": token},
+                  json={"name": "Audi A3", "license_plate": "GET-456"})
+
+    res = requests.get(f"{BASE_URL}/vehicles",
+                       headers={"Authorization": token})
+
+    assert res.status_code == 200
+    vehicles = res.json()
+    assert any(v["license_plate"] == "GET-123" for v in vehicles)
+    assert any(v["license_plate"] == "GET-456" for v in vehicles)
+
+def test_get_vehicle_reservations_empty(register_and_login):
+    # 2. Opvraging reserveringen voor voertuig zonder reserveringen
+    token = register_and_login("resuser", "pw", "Res Gebruiker")
+
+    create = requests.post(f"{BASE_URL}/vehicles",
+                           headers={"Authorization": token},
+                           json={"name": "Peugeot 208", "license_plate": "RES-001"})
+    assert create.status_code == 201
+
+    vehicles = requests.get(f"{BASE_URL}/vehicles",
+                            headers={"Authorization": token}).json()
+    vid = vehicles[0]["id"]
+
+    res = requests.get(f"{BASE_URL}/vehicles/{vid}/reservations",
+                       headers={"Authorization": token})
+    assert res.status_code == 200
+    assert res.json() == []
+
+def test_get_vehicle_history_empty(register_and_login):
+    # 3. Opvraging geschiedenis voor voertuig zonder geschiedenis
+    token = register_and_login("histuser", "pw", "History User")
+
+    create = requests.post(f"{BASE_URL}/vehicles",
+                           headers={"Authorization": token},
+                           json={"name": "VW Golf", "license_plate": "HIST-001"})
+    assert create.status_code == 201
+
+    vehicles = requests.get(f"{BASE_URL}/vehicles",
+                            headers={"Authorization": token}).json()
+    vid = vehicles[0]["id"]
+
+    res = requests.get(f"{BASE_URL}/vehicles/{vid}/history",
+                       headers={"Authorization": token})
+    assert res.status_code == 200
+    assert res.json() == []

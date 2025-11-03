@@ -1,6 +1,7 @@
 import json
 import hashlib
 import uuid
+from datetime import datetime
 from storage_utils import load_json, save_user_data
 from session_manager import add_session, remove_session, get_session
 from endpoints.baseEndpoints import BaseEndpoint
@@ -31,7 +32,9 @@ class AccountHandler(BaseEndpoint):
                 'id': str(len(users) + 1),
                 'username': username,
                 'password': hashed_password,
-                'name': name
+                'name': name,
+                'role': 'USER',
+                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
             save_user_data(users)
 

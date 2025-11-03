@@ -175,8 +175,8 @@ class VehicleHandler(BaseEndpoint):
             if path.endswith("/reservations"):
                 vid = path.split("/")[2]
                 vehicles = load_json("data/vehicles.json")
-                uvehicles = vehicles.get(session_user["username"], {}) 
-                if vid not in uvehicles:
+                uvehicles = [v for v in vehicles if v.get("user_id") == session_user.get("id")]
+                if vid not in [v["id"] for v in uvehicles]:
                     send(404)
                     send_header("Content-type", "application/json")
                     end_headers()
@@ -191,8 +191,8 @@ class VehicleHandler(BaseEndpoint):
             elif path.endswith("/history"):
                 vid = path.split("/")[2]
                 vehicles = load_json("data/vehicles.json")
-                uvehicles = vehicles.get(session_user["username"], {})
-                if vid not in uvehicles:
+                uvehicles = [v for v in vehicles if v.get("user_id") == session_user.get("id")]
+                if vid not in [v["id"] for v in uvehicles]:
                     send(404)
                     send_header("Content-type", "application/json")
                     end_headers()
