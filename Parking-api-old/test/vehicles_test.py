@@ -218,3 +218,54 @@ def test_vehicle_update_missing_field(register_and_login):
                           json={})
     assert update.status_code == 400
     assert "Require field missing" in update.text
+
+#DELETE /vehicles/{id} tests
+def test_vehicle_delete_success(register_and_login):
+    # 1. Succesvolle verwijdering van bestaand voertuig
+    token = register_and_login("klaas", "geheim", "Klaas Klinkhamer")
+
+    create = requests.post(f"{BASE_URL}/vehicles",
+                           headers={"Authorization": token},
+                           json={"name": "Opel Astra", "license_plate": "DEL-123"})
+    assert create.status_code == 201
+
+    vehicles = requests.get(f"{BASE_URL}/vehicles",
+                            headers={"Authorization": token}).json()
+    vehicle_id = next(v["id"] for v in vehicles if v["license_plate"] == "DEL-123")
+
+    delete = requests.delete(f"{BASE_URL}/vehicles/{vehicle_id}",
+                             headers={"Authorization": token})
+    assert delete.status_code == 200
+    data = delete.json()
+    assert data["status"] == "Deleted"
+
+    vehicles_after = requests.get(f"{BASE_URL}/vehicles",
+                                  headers={"Authorization": token}).json()
+    assert all(v["id"] != vehicle_id for v in vehicles_after)
+
+def test_vehicle_delete_not_found(register_and_login):
+    # 2. Probeer niet bestaand voertuig te verwijderen
+    token = register_and_login("hans", "geheim", "Hans Worst")
+
+    delete = requests.delete(f"{BASE_URL}/vehicles/999",
+                             headers={"Authorization": token})
+    assert delete.status_code in (403, 404)
+
+def test_vehicle_delete_other_user_forbidden(register_and_login):
+    # 3. Probeer voertuig van andere gebruiker te verwijderen
+    # User 1 maakt voertuig aan
+    token1 = register_and_login("sarah", "geheim", "Sarah Smits")
+    create = requests.post(f"{BASE_URL}/vehicles",
+                           headers={"Authorization": token1},
+                           json={"name": "Fiat Panda", "license_plate": "DEL-999"})
+    assert create.status_code == 201
+
+    vehicles1 = requests.get(f"{BASE_URL}/vehicles",
+                             headers={"Authorization": token1}).json()
+    vehicle_id = next(v["id"] for v in vehicles1 if v["license_plate"] == "DEL-999")
+
+    # User 2 probeert te verwijderen
+    token2 = register_and_login("mark", "geheim", "Mark Visser")
+    delete = requests.delete(f"{BASE_URL}/vehicles/{vehicle_id}",
+                             headers={"Authorization": token2})
+    assert delete.status_code in (403, 404)

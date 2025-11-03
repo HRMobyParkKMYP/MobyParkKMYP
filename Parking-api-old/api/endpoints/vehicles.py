@@ -144,16 +144,16 @@ class VehicleHandler(BaseEndpoint):
                     return
                 session_user = get_session(token)
                 vehicles = load_json("data/vehicles.json")
-                uvehicles = vehicles.get(session_user["username"], {})
+                user_id = session_user.get("id") or session_user.get("username")
+                vehicle = next((v for v in vehicles if v["id"] == lid and v.get("user_id") == user_id), None)
                 # Checkt of voertuig bestaat
-                if lid not in uvehicles:
+                if not vehicle:
                     send(403)
                     send_header("Content-type", "application/json")
                     end_headers()
                     w.write(b"Vehicle not found!")
                     return
-                # Verwijdert het voertuig
-                del vehicles[session_user["username"]][lid]
+                vehicles = [v for v in vehicles if not (v["id"] == lid and v.get("user_id") == user_id)]
                 save_data("data/vehicles.json", vehicles)
                 send(200)
                 send_header("Content-type", "application/json")
