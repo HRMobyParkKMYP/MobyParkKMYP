@@ -115,7 +115,6 @@ def test_vehicle_entry_success(register_and_login):
                             headers={"Authorization": token}).json()
     vehicle_id = next(v["id"] for v in vehicles if v["license_plate"] == "ENTRY-111")
 
-    # Entry aanmaken
     e_res = requests.post(f"{BASE_URL}/vehicles/{vehicle_id}/entry",
                           headers={"Authorization": token},
                           json={"parkinglot": "1"})
@@ -165,3 +164,57 @@ def test_vehicle_entry_missing_field(register_and_login):
     print("\n[ENTRY TEST 4 RESPONSE]", res.status_code, res.text)
     assert res.status_code == 401
     assert "Require field missing" in res.text
+
+#PUT /vehicles/{id} tests
+def test_vehicle_update_success(register_and_login):
+    # 1. Succesvolle update van bestaand voertuig
+    token = register_and_login("piet", "geheim", "Piet Puk")
+
+    create = requests.post(f"{BASE_URL}/vehicles",
+                           headers={"Authorization": token},
+                           json={"name": "Toyota Yaris", "license_plate": "PUT-123"})
+    assert create.status_code == 201
+
+    vehicles = requests.get(f"{BASE_URL}/vehicles",
+                            headers={"Authorization": token}).json()
+    vehicle_id = next(v["id"] for v in vehicles if v["license_plate"] == "PUT-123")
+
+    update = requests.put(f"{BASE_URL}/vehicles/{vehicle_id}",
+                          headers={"Authorization": token},
+                          json={"name": "Toyota Yaris Updated"})
+    assert update.status_code == 200
+    data = update.json()
+    assert data["status"] == "Success"
+    assert data["vehicle"]["name"] == "Toyota Yaris Updated"
+
+
+def test_vehicle_update_not_found(register_and_login):
+    # 2. Probeer niet bestaand voertuig te updaten
+    token = register_and_login("kees", "geheim", "Kees Koster")
+
+    # Probeer niet bestaand voertuig te updaten
+    update = requests.put(f"{BASE_URL}/vehicles/999",
+                          headers={"Authorization": token},
+                          json={"name": "DoesNotExist"})
+    assert update.status_code == 404
+    assert "Vehicle not found" in update.text
+
+
+def test_vehicle_update_missing_field(register_and_login):
+    # 3. Update met ontbrekend verplicht veld
+    token = register_and_login("klaas", "geheim", "Klaas Klaassen")
+
+    create = requests.post(f"{BASE_URL}/vehicles",
+                           headers={"Authorization": token},
+                           json={"name": "Mazda 3", "license_plate": "MISSING-123"})
+    assert create.status_code == 201
+
+    vehicles = requests.get(f"{BASE_URL}/vehicles",
+                            headers={"Authorization": token}).json()
+    vehicle_id = next(v["id"] for v in vehicles if v["license_plate"] == "MISSING-123")
+
+    update = requests.put(f"{BASE_URL}/vehicles/{vehicle_id}",
+                          headers={"Authorization": token},
+                          json={})
+    assert update.status_code == 400
+    assert "Require field missing" in update.text
