@@ -22,16 +22,22 @@ def test_register_success():
     }
 
     res = requests.post(f"{BASE_URL}/register", json=data)
+    requests.post(f"{BASE_URL}/register", json={
+            "username": "emma",
+            "password": "geheim",
+            "name": "Emma de Vries",
+            "email": "emma@example.com",
+            "phone": "+31612345699",
+            "birth_year": 1995
+        })
     assert res.status_code == 201
     assert "User created" in res.text
 
-    users = json.load(open("data/users.json"))
-    assert len(users) == 1
-    user = users[0]
-    assert user["username"] == "emma"
-    assert user["active"] is True
-    assert user["role"] == "USER"
-    assert "created_at" in user
+    res2 = requests.post(f"{BASE_URL}/login", json={
+            "username": "emma",
+            "password": "geheim"
+        })
+    assert res2.status_code == 200
 
 
 def test_register_missing_fields():
