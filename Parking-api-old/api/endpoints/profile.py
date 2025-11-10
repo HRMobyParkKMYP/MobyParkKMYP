@@ -19,9 +19,15 @@ class ProfileHandler(BaseEndpoint):
             session_user = get_session(token)
             data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
             users = load_json('data/users.json')
+            for field in ["password", "name", "email", "phone", "birth_year"]:
+                if field in data and (data[field] is None or str(data[field]).strip() == ""):
+                    send(400)
+                    send_header("Content-type", "application/json")
+                    end_headers()
+                    w.write(f"Bad Request: {field} cannot be empty".encode("utf-8"))
+                    return
             for user in users:
                 if user["username"] == session_user["username"]:
-                    # Update only the provided fields
                     if "password" in data and data["password"]:
                         user["password"] = hashlib.md5(data["password"].encode()).hexdigest()
                     if "name" in data:

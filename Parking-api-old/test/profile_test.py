@@ -140,5 +140,5 @@ def test_update_profile_without_password(register_and_login):
         headers={"Authorization": token},
         json=update_payload
     )
-    assert res.status_code == 200
-    assert "User updated succesfully" in res.text
+    assert res.status_code == 400
+    assert "Bad Request" in res.text
