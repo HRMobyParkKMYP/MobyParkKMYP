@@ -18,14 +18,35 @@ class AccountHandler(BaseEndpoint):
             username = data.get("username")
             password = data.get("password")
             name = data.get("name")
+            email = data.get("email")
+            phone = data.get("phone")
+            birth_year = data.get("birth_year")
+            if not username or not password or not name or not email or not phone or not birth_year:
+                send(400)
+                send_header("Content-type", "application/json")
+                end_headers()
+                w.write(b"Missing required fields")
+                return
             hashed_password = hashlib.md5(password.encode()).hexdigest()
             users = load_json('data/users.json')
             for user in users:
                 if username == user['username']:
-                    request_handler.send_response(200)
+                    request_handler.send_response(409)
                     request_handler.send_header("Content-Type", "application/json")
                     request_handler.end_headers()
                     request_handler.wfile.write(b'{"error": "Username already taken"}')
+                    return
+                if email == user['email']:
+                    request_handler.send_response(409)
+                    request_handler.send_header("Content-Type", "application/json")
+                    request_handler.end_headers()
+                    request_handler.wfile.write(b'{"error": "Email already registered"}')
+                    return
+                if phone == user['phone']:
+                    request_handler.send_response(409)
+                    request_handler.send_header("Content-Type", "application/json")
+                    request_handler.end_headers()
+                    request_handler.wfile.write(b'{"error": "Phone number already registered"}')
                     return
 
             users.append({
@@ -33,8 +54,12 @@ class AccountHandler(BaseEndpoint):
                 'username': username,
                 'password': hashed_password,
                 'name': name,
+                'email': email,
+                'phone': phone,
                 'role': 'USER',
-                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                'created_at': datetime.now().strftime("%Y-%m-%d"),
+                'birth_year': birth_year,
+                'active': True
             })
             save_user_data(users)
 

@@ -1,18 +1,20 @@
 import pytest
 import requests
 import json
-from storage_utils import load_json, save_data
 
 BASE_URL = "http://localhost:8000"
 
 @pytest.fixture
 def register_and_login():
-    def _register_and_login(username, password, name):
+    def _register_and_login(username, password, name, email, phone, birth_year):
         # Register user (ignore if already exists)
         requests.post(f"{BASE_URL}/register", json={
             "username": username,
             "password": password,
-            "name": name
+            "name": name,
+            "email": email,
+            "phone": phone,
+            "birth_year": birth_year
         })
 
         # Login to get session token
@@ -31,7 +33,7 @@ def register_and_login():
 #POST /vehicles tests
 def test_create_vehicle_success(register_and_login):
     #1. Maak een voertuig aan dat nog niet bestaat bij de user
-    token = register_and_login("jan", "geheim", "Jan Jansen")
+    token = register_and_login("abc", "geheim", "Jan Jansen", "1", "30192094", 1990)
 
     res = requests.post(f"{BASE_URL}/vehicles",
                         headers={"Authorization": token, "Content-Type": "application/json"},
@@ -44,7 +46,7 @@ def test_create_vehicle_success(register_and_login):
 
 def test_create_duplicate_vehicle_same_user(register_and_login):
     #2. Maak een voertuig aan dat al bestaat bij dezelfde gebruiker
-    token = register_and_login("jan", "geheim", "Jan Jansen")
+    token = register_and_login("bcd", "geheim", "Jan Jansen", "2", "30192095", 1990)
 
     # Eerste keer aanmaken
     requests.post(f"{BASE_URL}/vehicles",
@@ -63,7 +65,7 @@ def test_create_duplicate_vehicle_same_user(register_and_login):
 
 def test_create_vehicle_missing_field(register_and_login):
     #3. Maak een voertuig aan met ontbrekende verplichte velden
-    token = register_and_login("piet", "geheim", "Piet Pieters")
+    token = register_and_login("bac", "geheim", "Piet Pieters", "3", "30192096", 1990)
 
     res = requests.post(f"{BASE_URL}/vehicles",
                         headers={"Authorization": token},
@@ -87,12 +89,12 @@ def test_create_vehicle_invalid_token():
 
 def test_create_vehicle_different_user(register_and_login):
     #5. Zelfde voertuig als test 1, maar bij een andere gebruiker
-    token1 = register_and_login("jan", "geheim", "Jan Jansen")
+    token1 = register_and_login("bca", "geheim", "Jan Jansen", "4", "301974", 1990)
     requests.post(f"{BASE_URL}/vehicles",
                   headers={"Authorization": token1},
                   json={"name": "Opel Astra", "license_plate": "AAA-111"})
 
-    token2 = register_and_login("klaas", "geheim", "Klaas Bakker")
+    token2 = register_and_login("plo", "geheim", "Klaas Bakker", "5", "30175", 1990)
     res = requests.post(f"{BASE_URL}/vehicles",
                         headers={"Authorization": token2},
                         json={"name": "Opel Astra", "license_plate": "AAA-111"})
@@ -104,7 +106,7 @@ def test_create_vehicle_different_user(register_and_login):
 #/POST /vehicles/ tests
 def test_vehicle_entry_success(register_and_login):
     # 1. Succesvolle entry van bestaand voertuig
-    token = register_and_login("jan", "geheim", "Jan Jansen")
+    token = register_and_login("olp", "geheim", "Jan Jansen", "6", "3019254", 1990)
 
     # Eerst een voertuig aanmaken
     v_res = requests.post(f"{BASE_URL}/vehicles",
@@ -136,7 +138,7 @@ def test_vehicle_entry_invalid_token():
 
 def test_vehicle_entry_nonexistent_vehicle(register_and_login):
     # 3. Entry van een voertuig dat niet bestaat bij gebruiker
-    token = register_and_login("piet", "geheim", "Piet Pieters")
+    token = register_and_login("lop", "geheim", "Piet Pieters", "7", "3019896", 1990)
 
     res = requests.post(f"{BASE_URL}/vehicles/999/entry",
                         headers={"Authorization": token},
@@ -148,7 +150,7 @@ def test_vehicle_entry_nonexistent_vehicle(register_and_login):
 
 def test_vehicle_entry_missing_field(register_and_login):
     # 4. Entry met ontbrekend verplichte veld
-    token = register_and_login("klaas", "geheim", "Klaas Bakker")
+    token = register_and_login("kij", "geheim", "Klaas Bakker", "8", "30192895", 1990)
 
     # Eerst voertuig aanmaken
     v_res = requests.post(f"{BASE_URL}/vehicles",
@@ -169,7 +171,7 @@ def test_vehicle_entry_missing_field(register_and_login):
 #PUT /vehicles/{id} tests
 def test_vehicle_update_success(register_and_login):
     # 1. Succesvolle update van bestaand voertuig
-    token = register_and_login("piet", "geheim", "Piet Puk")
+    token = register_and_login("jik", "geheim", "Piet Puk", "9", "30198", 1990)
 
     create = requests.post(f"{BASE_URL}/vehicles",
                            headers={"Authorization": token},
@@ -191,7 +193,7 @@ def test_vehicle_update_success(register_and_login):
 
 def test_vehicle_update_not_found(register_and_login):
     # 2. Probeer niet bestaand voertuig te updaten
-    token = register_and_login("kees", "geheim", "Kees Koster")
+    token = register_and_login("adk", "geheim", "Kees Koster", "10", "301989", 1990)
 
     # Probeer niet bestaand voertuig te updaten
     update = requests.put(f"{BASE_URL}/vehicles/999",
@@ -203,7 +205,7 @@ def test_vehicle_update_not_found(register_and_login):
 
 def test_vehicle_update_missing_field(register_and_login):
     # 3. Update met ontbrekend verplicht veld
-    token = register_and_login("klaas", "geheim", "Klaas Klaassen")
+    token = register_and_login("idk", "geheim", "Klaas Klaassen", "11", "3019234", 1990)
 
     create = requests.post(f"{BASE_URL}/vehicles",
                            headers={"Authorization": token},
@@ -223,7 +225,7 @@ def test_vehicle_update_missing_field(register_and_login):
 #DELETE /vehicles/{id} tests
 def test_vehicle_delete_success(register_and_login):
     # 1. Succesvolle verwijdering van bestaand voertuig
-    token = register_and_login("klaas", "geheim", "Klaas Klinkhamer")
+    token = register_and_login("mnb", "geheim", "Klaas Klinkhamer", "12", "3019654", 1990)
 
     create = requests.post(f"{BASE_URL}/vehicles",
                            headers={"Authorization": token},
@@ -246,7 +248,7 @@ def test_vehicle_delete_success(register_and_login):
 
 def test_vehicle_delete_not_found(register_and_login):
     # 2. Probeer niet bestaand voertuig te verwijderen
-    token = register_and_login("hans", "geheim", "Hans Worst")
+    token = register_and_login("bnm", "geheim", "Hans Worst", "13", "30192098", 1990)
 
     delete = requests.delete(f"{BASE_URL}/vehicles/999",
                              headers={"Authorization": token})
@@ -255,7 +257,7 @@ def test_vehicle_delete_not_found(register_and_login):
 def test_vehicle_delete_other_user_forbidden(register_and_login):
     # 3. Probeer voertuig van andere gebruiker te verwijderen
     # User 1 maakt voertuig aan
-    token1 = register_and_login("sarah", "geheim", "Sarah Smits")
+    token1 = register_and_login("bnb", "geheim", "Sarah Smits", "14", "30192099", 1990)
     create = requests.post(f"{BASE_URL}/vehicles",
                            headers={"Authorization": token1},
                            json={"name": "Fiat Panda", "license_plate": "DEL-999"})
@@ -266,7 +268,7 @@ def test_vehicle_delete_other_user_forbidden(register_and_login):
     vehicle_id = next(v["id"] for v in vehicles1 if v["license_plate"] == "DEL-999")
 
     # User 2 probeert te verwijderen
-    token2 = register_and_login("mark", "geheim", "Mark Visser")
+    token2 = register_and_login("brb", "geheim", "Mark Visser", "29", "304392100", 1990)
     delete = requests.delete(f"{BASE_URL}/vehicles/{vehicle_id}",
                              headers={"Authorization": token2})
     assert delete.status_code in (403, 404)
@@ -274,7 +276,7 @@ def test_vehicle_delete_other_user_forbidden(register_and_login):
 #GET /vehicles tests
 def test_get_vehicles_success(register_and_login):
     # 1. Succesvolle opvraging van voertuigenlijst
-    token = register_and_login("emma", "geheim", "Emma de Vries")
+    token = register_and_login("yhn", "geheim", "Emma de Vries", "15", "30192123", 1990)
 
     # Voeg voertuigen toe
     requests.post(f"{BASE_URL}/vehicles",
@@ -294,7 +296,7 @@ def test_get_vehicles_success(register_and_login):
 
 def test_get_vehicle_reservations_empty(register_and_login):
     # 2. Opvraging reserveringen voor voertuig zonder reserveringen
-    token = register_and_login("resuser", "pw", "Res Gebruiker")
+    token = register_and_login("resuser", "pw", "Res Gebruiker", "16", "30192114", 1990)
 
     create = requests.post(f"{BASE_URL}/vehicles",
                            headers={"Authorization": token},
@@ -312,7 +314,7 @@ def test_get_vehicle_reservations_empty(register_and_login):
 
 def test_get_vehicle_history_empty(register_and_login):
     # 3. Opvraging geschiedenis voor voertuig zonder geschiedenis
-    token = register_and_login("histuser", "pw", "History User")
+    token = register_and_login("histuser", "pw", "History User", "17", "30192124", 1990)
 
     create = requests.post(f"{BASE_URL}/vehicles",
                            headers={"Authorization": token},
