@@ -30,44 +30,169 @@ class Apiroutes:
         }
         return {"Status": status, "StatusMessage": messages.get(status, "Unknown status code.")}
 
-    # Defines all the routes for the API
+    def tempDefaultResponse(self) -> dict:
+        try:
+            return self.FormatResponse(self.StatusResponse(201), {"status" : "success"})
+        except Exception as e:
+            return self.FormatResponse(self.StatusResponse(400), {"status" : "failed"})
+        
     def SetupRoutes(self) -> None:
 
         @self.App.get("/", response_model=ApiResponse)
         async def root():
-            return self.FormatResponse(self.StatusResponse(200), "Hello World!")
+            return self.tempDefaultResponse()
 
+        # Auth
 
-        # allows users to set their auth key via the frontend securely
-        @self.App.post("/v1/internal/apikey", response_model=ApiResponse)
-        async def apikey(internalBearer : str):
-            try:
-                if internalBearer != constants.IBT:
-                    self.log.warning(f"attempted unauthorized access to apikey")
-                    return self.FormatResponse(self.StatusResponse(400), {"status" : "Unauthorized access"})
-                
-                return self.FormatResponse(self.StatusResponse(201), {"status" : "success"})
-            
-            except Exception as e:
-                self.log.error(f"Failed to set auth key: {e}")
-                return self.FormatResponse(self.StatusResponse(400), {"status" : "failed"})
-        
+        @self.App.post("/register", response_model=ApiResponse)
+        async def register():
+            return self.tempDefaultResponse()
 
-        # allows users to get their auth key via the frontend securely
-        @self.App.get("/v1/internal/apikey", response_model=ApiResponse)
-        async def apikey(internalBearer : str):
-            try:
-                if internalBearer != constants.IBT:
-                    self.log.warning(f"attempted unauthorized access to apikey")
-                    return self.FormatResponse(self.StatusResponse(400), {"status" : "Unauthorized access"})
+        @self.App.post("/login", response_model=ApiResponse)
+        async def login():
+            return self.tempDefaultResponse()
 
-                return self.FormatResponse(self.StatusResponse(201), {"status" : "success"})
-            
-            except Exception as e:
-                self.log.error(f"Failed to get auth key: {e}")
-                return self.FormatResponse(self.StatusResponse(400), {"status" : "failed"})
+        @self.App.get("/logout", response_model=ApiResponse)
+        async def logout():
+            return self.tempDefaultResponse()
 
+        # User
 
+        @self.App.get("/profile", response_model=ApiResponse)
+        async def get_profile():
+            return self.tempDefaultResponse()
+
+        @self.App.put("/profile", response_model=ApiResponse)
+        async def update_profile():
+            return self.tempDefaultResponse()
+
+        # Parking Lot
+
+        @self.App.post("/parking-lots", response_model=ApiResponse)
+        async def create_parking_lot():
+            return self.tempDefaultResponse()
+
+        @self.App.get("/parking-lots", response_model=ApiResponse)
+        async def get_parking_lots():
+            return self.tempDefaultResponse()
+
+        @self.App.get("/parking-lots/{id}", response_model=ApiResponse)
+        async def get_parking_lot(id: str):
+            return self.tempDefaultResponse()
+
+        @self.App.put("/parking-lots/{id}", response_model=ApiResponse)
+        async def update_parking_lot(id: str):
+            return self.tempDefaultResponse()
+
+        @self.App.delete("/parking-lots/{id}", response_model=ApiResponse)
+        async def delete_parking_lot(id: str):
+            return self.tempDefaultResponse()
+
+        # Parking Lot Handling
+
+        @self.App.post("/parking-lots/{id}/sessions/start", response_model=ApiResponse)
+        async def start_parking_session(id: str):
+            return self.tempDefaultResponse()
+
+        @self.App.post("/parking-lots/{id}/sessions/stop", response_model=ApiResponse)
+        async def stop_parking_session(id: str):
+            return self.tempDefaultResponse()
+
+        @self.App.get("/parking-lots/{id}/sessions", response_model=ApiResponse)
+        async def get_parking_sessions(id: str):
+            return self.tempDefaultResponse()
+
+        @self.App.get("/parking-lots/{id}/sessions/{sid}", response_model=ApiResponse)
+        async def get_parking_session(id: str, sid: str):
+            return self.tempDefaultResponse()
+
+        @self.App.delete("/parking-lots/{id}/sessions/{sid}", response_model=ApiResponse)
+        async def delete_parking_session(id: str, sid: str):
+            return self.tempDefaultResponse()
+
+        # Reservations
+
+        @self.App.post("/reservations", response_model=ApiResponse)
+        async def create_reservation():
+            return self.tempDefaultResponse()
+
+        @self.App.put("/reservations/{id}", response_model=ApiResponse)
+        async def update_reservation(id: str):
+            return self.tempDefaultResponse()
+
+        @self.App.get("/reservations/{id}", response_model=ApiResponse)
+        async def get_reservation(id: str):
+            return self.tempDefaultResponse()
+
+        @self.App.delete("/reservations/{id}", response_model=ApiResponse)
+        async def delete_reservation(id: str):
+            return self.tempDefaultResponse()
+
+        # Vehicles
+
+        @self.App.post("/vehicles", response_model=ApiResponse)
+        async def create_vehicle():
+            return self.tempDefaultResponse()
+
+        @self.App.get("/vehicles", response_model=ApiResponse)
+        async def get_vehicles():
+            return self.tempDefaultResponse()
+
+        @self.App.get("/vehicles/{username}", response_model=ApiResponse)
+        async def get_user_vehicles(username: str):
+            return self.tempDefaultResponse()
+
+        @self.App.put("/vehicles/{plate_id}", response_model=ApiResponse)
+        async def update_vehicle(plate_id: str):
+            return self.tempDefaultResponse()
+
+        @self.App.delete("/vehicles/{plate_id}", response_model=ApiResponse)
+        async def delete_vehicle(plate_id: str):
+            return self.tempDefaultResponse()
+
+        @self.App.post("/vehicles/{id}/entry", response_model=ApiResponse)
+        async def vehicle_entry(id: str):
+            return self.tempDefaultResponse()
+
+        @self.App.get("/vehicles/{id}/reservations", response_model=ApiResponse)
+        async def get_vehicle_reservations(id: str):
+            return self.tempDefaultResponse()
+
+        @self.App.get("/vehicles/{id}/history", response_model=ApiResponse)
+        async def get_vehicle_history(id: str):
+            return self.tempDefaultResponse()
+
+        # Payments
+
+        @self.App.post("/payments", response_model=ApiResponse)
+        async def create_payment():
+            return self.tempDefaultResponse()
+
+        @self.App.post("/payments/refund", response_model=ApiResponse)
+        async def refund_payment():
+            return self.tempDefaultResponse()
+
+        @self.App.put("/payments/{transaction}", response_model=ApiResponse)
+        async def complete_payment(transaction: str):
+            return self.tempDefaultResponse()
+
+        @self.App.get("/payments", response_model=ApiResponse)
+        async def get_payments():
+            return self.tempDefaultResponse()
+
+        @self.App.get("/payments/{username}", response_model=ApiResponse)
+        async def get_user_payments(username: str):
+            return self.tempDefaultResponse()
+
+        # Billing
+
+        @self.App.get("/billing", response_model=ApiResponse)
+        async def get_billing():
+            return self.tempDefaultResponse()
+
+        @self.App.get("/billing/{username}", response_model=ApiResponse)
+        async def get_user_billing(username: str):
+            return self.tempDefaultResponse()
 
 def run():
     print("run")
