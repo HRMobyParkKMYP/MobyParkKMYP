@@ -112,17 +112,39 @@ def test_admin_can_create_and_get_parkinglot():
     assert any(lot.get("name") == "Central Garage" for lot in lots.values())
 
 def test_admin_can_update_parkinglot_capacity():
+    add_admin()
     token = login_admin()
     headers = {"Authorization": token}
+    
+    # Create a parking lot first
+    lot_data = {"name": "Test Lot", "location": "Test", "capacity": 100}
+    requests.post(f"{BASE_URL}/parking-lots/", json=lot_data, headers=headers)
+    
+    # Now update it
     update_data = {"capacity": 120}
     res = requests.put(f"{BASE_URL}/parking-lots/1", json=update_data, headers=headers)
-    assert res.status_code in (200, 204)
+    assert res.status_code in (200, 204), f"Failed to update: {res.text}"
 
 def test_admin_can_delete_parkinglot():
+    add_admin()
     token = login_admin()
     headers = {"Authorization": token}
+    
+    # Create a parking lot first
+    lot_data = {"name": "Test Lot", "location": "Test", "capacity": 100}
+    requests.post(f"{BASE_URL}/parking-lots/", json=lot_data, headers=headers)
+    
+    # Now delete it
     res = requests.delete(f"{BASE_URL}/parking-lots/1", headers=headers)
-    assert res.status_code in (200, 204)
+    assert res.status_code in (200, 204), f"Failed to delete: {res.text}"
+
+def test_create_parkinglot_missing_fields_fails():
+    add_admin()
+    token = login_admin()
+    headers = {"Authorization": token}
+    res = requests.post(f"{BASE_URL}/parking-lots/", json={"name": "Bad Lot"}, headers=headers)
+    assert res.status_code == 400, f"Expected 400, got {res.status_code}: {res.text}"
+
 
 def test_non_admin_cannot_create_parkinglot(register_and_login):
     token = register_and_login("bob", "securepass", "Bob", "bob@gmail.com", "+3129384985")
