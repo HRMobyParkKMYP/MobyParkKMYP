@@ -6,7 +6,7 @@ from endpoints.baseEndpoints import BaseEndpoint
 
 class ProfileHandler(BaseEndpoint):
     def handle(self, request_handler, method):
-        path, send, send_header, end_headers, w = self.setup(request_handler, method)
+        path, send, send_header, end_headers, w = self.setup(request_handler)
 
         if method == "PUT" and path == "/profile":
             token = request_handler.headers.get('Authorization')
@@ -17,7 +17,7 @@ class ProfileHandler(BaseEndpoint):
                 w.write(b"Unauthorized: Invalid or missing session token")
                 return
             session_user = get_session(token)
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
             data["username"] = session_user["username"]
             if data["password"]:
                 data["password"] = hashlib.md5(data["password"].encode()).hexdigest()
