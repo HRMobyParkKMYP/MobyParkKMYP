@@ -19,7 +19,7 @@ class ParkingLotHandler(BaseEndpoint):
             session_user = get_session(token)
             if 'sessions' in path:
                 lid = path.split("/")[2]
-                data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+                data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
                 sessions = load_json(f'data/pdata/p{lid}-sessions.json')
                 if path.endswith('start'):
                     if 'licenseplate' not in data:
@@ -77,13 +77,13 @@ class ParkingLotHandler(BaseEndpoint):
                     end_headers()
                     w.write(b"Access denied")
                     return
-                data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+                data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
                 parking_lots = load_parking_lot_data()
                 new_lid = str(len(parking_lots) + 1)
                 parking_lots[new_lid] = data
                 save_parking_lot_data(parking_lots)
                 send(201)
-                end_headers("Content-type", "application/json")
+                send_header("Content-type", "application/json")
                 end_headers()
                 w.write(f"Parking lot saved under ID: {new_lid}".encode('utf-8'))
 
@@ -106,7 +106,7 @@ class ParkingLotHandler(BaseEndpoint):
                         end_headers()
                         w.write(b"Access denied")
                         return
-                    data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+                    data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
                     parking_lots[lid] = data
                     save_parking_lot_data(parking_lots)
                     send(200)
@@ -168,7 +168,7 @@ class ParkingLotHandler(BaseEndpoint):
                     w.write(b"Parking lot not found")
                     return
                 
-        if method == "GET" and path.startswith("/parking-lots/"):
+        if method == "GET" and path.startswith("/parking-lots/") :
             lid = path.split("/")[2]
             parking_lots = load_parking_lot_data()
             token = request_handler.headers.get('Authorization')
@@ -186,7 +186,7 @@ class ParkingLotHandler(BaseEndpoint):
                         end_headers()
                         w.write(b"Unauthorized: Invalid or missing session token")
                         return
-                    sessions = load_json(f'data/pdata/p{lid}-sessions.json')
+                    session_user = get_session(token)
                     rsessions = []
                     if path.endswith('/sessions'):
                         if "ADMIN" == session_user.get('role'):

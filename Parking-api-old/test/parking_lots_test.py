@@ -14,15 +14,18 @@ def _data_users_path():
 @pytest.fixture
 def register_and_login():
     def _register_and_login(username, password, name, email, num, role="USER"):
-        # Register user (ignore if already exists)
-        requests.post(f"{BASE_URL}/register", json={
+        # Register user
+        reg_res = requests.post(f"{BASE_URL}/register", json={
             "username": username,
             "password": password,
             "name": name,
             "email": email,
             "phone": num,
+            "birth_year": 1990,
             "role": role
         })
+        # Allow 200/201 for success, or ignore if user already exists (409)
+        assert reg_res.status_code in (200, 201, 409), f"Registration failed: {reg_res.text}"
 
         # Login to get session token
         res = requests.post(f"{BASE_URL}/login", json={
@@ -36,7 +39,6 @@ def register_and_login():
 def add_admin():
     path = _data_users_path()
     
-    # Load existing users or create new list
     try:
         with open(path, "r", encoding="utf-8") as f:
             users = json.load(f)
@@ -89,6 +91,8 @@ def login_admin():
 
 
 def test_admin_can_create_and_get_parkinglot():
+    add_admin()
+
     token = login_admin()
     headers = {"Authorization": token}
 
@@ -98,15 +102,27 @@ def test_admin_can_create_and_get_parkinglot():
         "capacity": 100
     }
 
-    res = requests.post(f"{BASE_URL}/parking-lots", json=lot_data, headers=headers)
+    res = requests.post(f"{BASE_URL}/parking-lots/", json=lot_data, headers=headers)    
     assert res.status_code in (200, 201), f"Failed to create parking lot: {res.text}"
 
-    res_get = requests.get(f"{BASE_URL}/parking-lots", headers=headers)
+    res_get = requests.get(f"{BASE_URL}/parking-lots/", headers=headers)
     assert res_get.status_code == 200, f"Failed to fetch parking lots: {res_get.text}"
     lots = res_get.json()
     assert isinstance(lots, dict)
     assert any(lot.get("name") == "Central Garage" for lot in lots.values())
 
+def test_admin_can_update_parkinglot_capacity():
+    token = login_admin()
+    headers = {"Authorization": token}
+    update_data = {"capacity": 120}
+    res = requests.put(f"{BASE_URL}/parking-lots/1", json=update_data, headers=headers)
+    assert res.status_code in (200, 204)
+
+def test_admin_can_delete_parkinglot():
+    token = login_admin()
+    headers = {"Authorization": token}
+    res = requests.delete(f"{BASE_URL}/parking-lots/1", headers=headers)
+    assert res.status_code in (200, 204)
 
 def test_non_admin_cannot_create_parkinglot(register_and_login):
     token = register_and_login("bob", "securepass", "Bob", "bob@gmail.com", "+3129384985")
