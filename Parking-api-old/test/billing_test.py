@@ -84,7 +84,6 @@ def login_admin():
 
 
 def test_user_can_get_own_billing(register_and_login):
-    """User should be able to view their own billing summary."""
     token = register_and_login("alice", "test123", "Alice", "alice@test.local", "+3111111111")
     headers = {"Authorization": token}
 
@@ -92,12 +91,10 @@ def test_user_can_get_own_billing(register_and_login):
     assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
     data = res.json()
     assert isinstance(data, list)
-    # May be empty if user has no sessions, but must be a list
     assert all("session" in b for b in data or [])
 
 
 def test_user_cannot_get_other_user_billing(register_and_login):
-    """Non-admin users should not access other users' billing data."""
     register_and_login("alice", "test123", "Alice", "alice@test.local", "+3111111111")
     token_bob = register_and_login("bob", "test123", "Bob", "bob@test.local", "+3222222222")
     headers = {"Authorization": token_bob}
@@ -108,7 +105,6 @@ def test_user_cannot_get_other_user_billing(register_and_login):
 
 
 def test_unauthorized_billing_access_fails():
-    """No token → should fail with 401."""
     res = requests.get(f"{BASE_URL}/billing")
     assert res.status_code == 401, f"Expected 401, got {res.status_code}: {res.text}"
     assert "Unauthorized" in res.text
