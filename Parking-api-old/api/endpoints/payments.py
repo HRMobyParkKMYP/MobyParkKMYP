@@ -8,7 +8,7 @@ from endpoints.baseEndpoints import BaseEndpoint
 
 class PaymentHandler(BaseEndpoint):
     def handle(self, request_handler, method):
-        path, send, send_header, end_headers, w = self.setup(request_handler, method)
+        path, send, send_header, end_headers, w = self.setup(request_handler)
 
         if method == "POST" and path.startswith("/payments"):
             token = request_handler.headers.get('Authorization')
@@ -20,7 +20,7 @@ class PaymentHandler(BaseEndpoint):
                 return
             payments = load_payment_data()
             session_user = get_session(token)
-            data = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            data = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
             if path.endswith("/refund"):
                 if not 'ADMIN' == session_user.get('role'):
                     send(403)
@@ -40,7 +40,7 @@ class PaymentHandler(BaseEndpoint):
                     "amount": -abs(data.get("amount", 0)),
                     "coupled_to": data.get("coupled_to"),
                     "processed_by": session_user["username"],
-                    "created_at": datetime.now().strftime("%d-%m-%Y %H:%I:%s"),
+                    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "completed": False,
                     "hash": sc.generate_transaction_validation_hash()
                 }
@@ -56,7 +56,7 @@ class PaymentHandler(BaseEndpoint):
                     "transaction": data.get("transaction"),
                     "amount": data.get("amount", 0),
                     "initiator": session_user["username"],
-                    "created_at": datetime.now().strftime("%d-%m-%Y %H:%I:%s"),
+                    "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "completed": False,
                     "hash": sc.generate_transaction_validation_hash()
                 }
@@ -79,7 +79,7 @@ class PaymentHandler(BaseEndpoint):
             pid = path.replace("/payments/", "")
             payments = load_payment_data()
             session_user = get_session(token)
-            data  = json.loads(self.rfile.read(int(self.headers.get("Content-Length", -1))))
+            data  = json.loads(request_handler.rfile.read(int(request_handler.headers.get("Content-Length", -1))))
             payment = next(p for p in payments if p["transaction"] == pid)
             if payment:
                 for field in ["t_data", "validation"]:
@@ -95,7 +95,7 @@ class PaymentHandler(BaseEndpoint):
                     end_headers()
                     w.write(json.dumps({"error": "Validation failed", "info": "The validation of the security hash could not be validated for this transaction."}).encode("utf-8"))
                     return
-                payment["completed"] = datetime.now().strftime("%d-%m-%Y %H:%I:%s")
+                payment["completed"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 payment["t_data"] = data.get("t_data", {})
                 save_payment_data(payments)
                 send(200)
@@ -121,7 +121,8 @@ class PaymentHandler(BaseEndpoint):
             payments = []
             session_user = get_session(token)
             for payment in load_payment_data():
-                if payment["username"] == session_user["username"]:
+                if payment.get("initiator") == session_user["username"] or payment.get("processed_by") == session_user["username"]:
+
                     payments.append(payment)
             send(200)
             send_header("Content-type", "application/json")
@@ -148,7 +149,7 @@ class PaymentHandler(BaseEndpoint):
                 w.write(b"Access denied")
                 return
             for payment in load_payment_data():
-                if payment["username"] == session_user["username"]:
+                if payment.get("initiator") == session_user["username"] or payment.get("processed_by") == session_user["username"]:
                     payments.append(payment)
             send(200)
             send_header("Content-type", "application/json")
