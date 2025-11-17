@@ -13,3 +13,4 @@ UVICORN_HOST_IP = environment["API_HOST_IP"]
 UVICORN_HOST_PORT = int(environment["API_HOST_PORT"])
 
 FERNET_KEY = environment["FERNET_KEY"] 
+DB_PATH = os.path.join(MAIN_DIR, "parking.sqlite3")
