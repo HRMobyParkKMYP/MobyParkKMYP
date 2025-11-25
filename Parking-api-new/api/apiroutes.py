@@ -3,7 +3,7 @@ from customlogger import Logger
 import constants
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
-from endpointsv2 import account
+from account import account
 
 class ApiResponse(BaseModel):
     StatusResponse: dict

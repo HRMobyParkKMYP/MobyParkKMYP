@@ -1,15 +1,12 @@
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
-import hashlib
 import uuid
-import bcrypt
 from datetime import datetime
-from session_manager import add_session, remove_session, get_session
 from models.User import User
-import database_utils as db
-from utils.auth_utils import hash_password_bcrypt, verify_password
-
+from utils import database_utils as db
+from utils import auth_utils
+from utils.session_manager import add_session, remove_session, get_session
 
 router = APIRouter()
 
@@ -25,23 +22,6 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str
     password: str
-
-def hash_password_bcrypt(password: str) -> tuple[str, str]:
-    """Hash password with bcrypt and return (hash, salt)"""
-    salt = bcrypt.gensalt()
-    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-    return hashed.decode('utf-8'), salt.decode('utf-8')
-
-def verify_password(password: str, stored_hash: str, hash_version: str) -> bool:
-    """Verify password based on hash version"""
-    if hash_version == 'md5':
-        # Old accounts: MD5 hash was hashed with bcrypt
-        # First hash with MD5, then verify with bcrypt
-        md5_hash = hashlib.md5(password.encode()).hexdigest()
-        return bcrypt.checkpw(md5_hash.encode('utf-8'), stored_hash.encode('utf-8'))
-    else:
-        # New accounts: direct bcrypt
-        return bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
 
 @router.post("/register")
 async def register(request: RegisterRequest):
@@ -66,8 +46,7 @@ async def register(request: RegisterRequest):
     if db.get_user_by_phone(phone):
         raise HTTPException(status_code=409, detail="Phone number already registered")
     
-    # Hash password with bcrypt (new method)
-    hashed_password, salt = hash_password_bcrypt(password)
+    hashed_password, salt = auth_utils.hash_password_bcrypt(password)
     
     # Create new user in database
     user_id = db.create_user(
@@ -105,7 +84,7 @@ async def login(request: LoginRequest):
     # Verify password based on hash version
     hash_version = user.hash_v or 'md5'  # Default to md5 for old accounts without hash_v
     
-    if not verify_password(password, user.password_hash, hash_version):
+    if not auth_utils.verify_password(password, user.password_hash, hash_version):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
     # Create session
