@@ -20,7 +20,7 @@ def get_db_path():
 def get_db_connection():
     """Database connectie context manager"""
     conn = sqlite3.connect(get_db_path())
-    conn.row_factory = sqlite3.Row  # Enable kolom toegang op naam
+    conn.row_factory = sqlite3.Row 
     try:
         yield conn
         conn.commit()
