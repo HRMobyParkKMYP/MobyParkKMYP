@@ -3,6 +3,7 @@ from customlogger import Logger
 import constants
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
+from account import account
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
@@ -12,6 +13,7 @@ class Apiroutes:
     def __init__(self) -> None:
         self.App = FastAPI()
         self.log = Logger.getLogger("API")
+        self.SetupEndpoints()
         self.SetupRoutes()
 
 
@@ -35,25 +37,15 @@ class Apiroutes:
             return self.FormatResponse(self.StatusResponse(201), {"status" : "success"})
         except Exception as e:
             return self.FormatResponse(self.StatusResponse(400), {"status" : "failed"})
+    
+    def SetupEndpoints(self) -> None:
+        """Include all endpoint routers"""
+        self.App.include_router(account.router, tags=["Account"])
         
     def SetupRoutes(self) -> None:
 
         @self.App.get("/", response_model=ApiResponse)
         async def root():
-            return self.tempDefaultResponse()
-
-        # Auth
-
-        @self.App.post("/register", response_model=ApiResponse)
-        async def register():
-            return self.tempDefaultResponse()
-
-        @self.App.post("/login", response_model=ApiResponse)
-        async def login():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/logout", response_model=ApiResponse)
-        async def logout():
             return self.tempDefaultResponse()
 
         # User
