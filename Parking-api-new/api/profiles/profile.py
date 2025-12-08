@@ -4,7 +4,7 @@ from typing import Optional
 from models.User import User
 from utils import database_utils as db
 from utils import auth_utils
-from utils.session_manager import get_session
+from utils.session_manager import get_session, update_session
 
 router = APIRouter()
 
@@ -48,6 +48,7 @@ async def update_profile(data: ProfileUpdateRequest, authorization: Optional[str
     Update profile fields for the logged-in user.
     Fields: password, name, email, phone, birth_year
     Password will be hashed with bcrypt and stored encrypted (consistent with auth_utils).
+    Session is automatically refreshed with updated user data.
     """
     if not authorization:
         raise HTTPException(status_code=401, detail="Invalid session token")
@@ -61,10 +62,10 @@ async def update_profile(data: ProfileUpdateRequest, authorization: Optional[str
         raise HTTPException(status_code=401, detail="Invalid session token")
 
     # Validate non-empty values if provided
-    for field_name in ["password", "name", "email", "phone", "birth_year"]:
-        val = getattr(data, field_name)
+    for field_name in ["password", "name", "email", "phone"]:
+        val = getattr(data, field_name, None)
         if val is not None:
-            if (isinstance(val, str) and val.strip() == ""):
+            if isinstance(val, str) and val.strip() == "":
                 raise HTTPException(status_code=400, detail=f"{field_name} cannot be empty")
 
     # If changing email or phone, ensure uniqueness
@@ -80,31 +81,41 @@ async def update_profile(data: ProfileUpdateRequest, authorization: Optional[str
 
     # Build update fields
     update_fields = {}
+    session_updates = {}
+
     if data.password:
         hashed, salt = auth_utils.hash_password_bcrypt(data.password)
         update_fields["password_hash"] = hashed
         update_fields["salt"] = salt
         update_fields["hash_v"] = "bcrypt"
+        # Don't expose password in session
 
     if data.name is not None:
         update_fields["name"] = data.name
+        session_updates["name"] = data.name
 
     if data.email is not None:
         update_fields["email"] = data.email
+        session_updates["email"] = data.email
 
     if data.phone is not None:
         update_fields["phone"] = data.phone
+        session_updates["phone"] = data.phone
 
     if data.birth_year is not None:
         update_fields["birth_year"] = data.birth_year
+        session_updates["birth_year"] = data.birth_year
 
     if not update_fields:
         raise HTTPException(status_code=400, detail="No fields to update")
 
+    # Update user in database
     rows = db.update_user_by_username(username, update_fields)
     if rows == 0:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Optionally refresh session data (if you store name/email etc. in session)
-    # For now we just return success
+    # Refresh session with updated data
+    if session_updates:
+        update_session(authorization, session_updates)
+
     return {"message": "User updated successfully"}

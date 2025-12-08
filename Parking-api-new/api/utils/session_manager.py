@@ -40,3 +40,10 @@ def get_session(token: str) -> dict:
         User data if session exists, None otherwise
     """
     return sessions.get(token)
+
+def update_session(token: str, updates: dict):
+    """Update an existing session with new user data"""
+    if token in sessions:
+        sessions[token].update(updates)
+        return True
+    return False
