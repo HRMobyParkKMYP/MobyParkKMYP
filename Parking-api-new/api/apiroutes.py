@@ -4,7 +4,7 @@ import constants
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 from account import account
-from profile import profile
+from profiles import profile
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
