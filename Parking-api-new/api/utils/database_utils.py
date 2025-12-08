@@ -93,3 +93,7 @@ def update_user_by_username(username: str, fields: dict) -> int:
         cursor = conn.cursor()
         cursor.execute(query, tuple(params))
         return cursor.rowcount
+def get_all_users() -> List[Dict[str, Any]]:
+    """Get alle users"""
+    query = "SELECT * FROM users ORDER BY created_at DESC"
+    return execute_query(query)
