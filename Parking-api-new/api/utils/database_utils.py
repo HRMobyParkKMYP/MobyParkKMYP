@@ -72,3 +72,8 @@ def get_user_by_phone(phone: str) -> Optional[Dict[str, Any]]:
     query = "SELECT * FROM users WHERE phone = ?"
     results = execute_query(query, (phone,))
     return results[0] if results else None
+
+def get_all_users() -> List[Dict[str, Any]]:
+    """Get alle users"""
+    query = "SELECT * FROM users ORDER BY created_at DESC"
+    return execute_query(query)
