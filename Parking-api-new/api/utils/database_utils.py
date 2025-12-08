@@ -54,6 +54,23 @@ def create_user(username: str, password_hash: str, name: str, email: str,
         cursor.execute(query, (username, password_hash, name, email, phone, 
                               role, birth_year, hash_v, salt, created_at))
         return cursor.lastrowid
+    
+def create_admin_user(username: str, password_hash: str, name: str, email: str, 
+                phone: str, birth_year: int, role: str = 'ADMIN', 
+                hash_v: str = 'bcrypt', salt: str = None) -> int:
+    """Maak nieuwe admin, geeft admin ID"""
+    created_at = datetime.now().strftime("%Y-%m-%dT00:00:00Z")
+    
+    query = """
+        INSERT INTO users (username, password_hash, name, email, phone, 
+                          role, birth_year, active, hash_v, salt, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, (username, password_hash, name, email, phone, 
+                              role, birth_year, hash_v, salt, created_at))
+        return cursor.lastrowid
 
 def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     """Get user by username"""

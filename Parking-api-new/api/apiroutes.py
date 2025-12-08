@@ -5,6 +5,7 @@ from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 from account import account
 from vehicle import vehicle
+from parking_lots import parking_lots
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
@@ -43,6 +44,7 @@ class Apiroutes:
         """Include all endpoint routers"""
         self.App.include_router(account.router, tags=["Account"])
         self.App.include_router(vehicle.router, tags=["Vehicle"])
+        self.App.include_router(parking_lots.router, tags=["Parking Lots"])
         
     def SetupRoutes(self) -> None:
 
@@ -50,7 +52,7 @@ class Apiroutes:
         async def root():
             return self.tempDefaultResponse()
 
-        @self.app.get("/health")
+        @self.App.get("/health")
         async def health_check():
             return {"status": "healthy"}
         # User
