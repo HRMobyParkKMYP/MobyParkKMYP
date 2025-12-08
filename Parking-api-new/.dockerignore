@@ -1,0 +1,14 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.pytest_cache
+.coverage
+test/
+*.md
+.gitkeep
+api/data/*
+api/systemlogs/*
