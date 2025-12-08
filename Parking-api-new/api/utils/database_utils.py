@@ -73,6 +73,26 @@ def get_user_by_phone(phone: str) -> Optional[Dict[str, Any]]:
     results = execute_query(query, (phone,))
     return results[0] if results else None
 
+def update_user_by_username(username: str, fields: dict) -> int:
+    """
+    Update user fields for a user identified by `username`.
+    Returns number of affected rows (0 if user not found).
+    """
+    if not fields:
+        return 0
+
+    cols = []
+    params = []
+    for k, v in fields.items():
+        cols.append(f"{k} = ?")
+        params.append(v)
+
+    params.append(username)
+    query = f"UPDATE users SET {', '.join(cols)} WHERE username = ?"
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, tuple(params))
+        return cursor.rowcount
 def get_all_users() -> List[Dict[str, Any]]:
     """Get alle users"""
     query = "SELECT * FROM users ORDER BY created_at DESC"

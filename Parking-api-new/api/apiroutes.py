@@ -4,6 +4,7 @@ import constants
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 from account import account
+from profiles import profile
 from vehicle import vehicle
 
 class ApiResponse(BaseModel):
@@ -42,6 +43,7 @@ class Apiroutes:
     def SetupEndpoints(self) -> None:
         """Include all endpoint routers"""
         self.App.include_router(account.router, tags=["Account"])
+        self.App.include_router(profile.router, tags=["Profile"])        
         self.App.include_router(vehicle.router, tags=["Vehicle"])
         
     def SetupRoutes(self) -> None:
@@ -158,6 +160,7 @@ class Apiroutes:
         @self.App.get("/billing/{username}", response_model=ApiResponse)
         async def get_user_billing(username: str):
             return self.tempDefaultResponse()
+        
 
 def run():
     print("run")
