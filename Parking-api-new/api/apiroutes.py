@@ -4,6 +4,7 @@ import constants
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 from account import account
+from vehicle import vehicle
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
@@ -41,6 +42,7 @@ class Apiroutes:
     def SetupEndpoints(self) -> None:
         """Include all endpoint routers"""
         self.App.include_router(account.router, tags=["Account"])
+        self.App.include_router(vehicle.router, tags=["Vehicle"])
         
     def SetupRoutes(self) -> None:
 
@@ -120,39 +122,7 @@ class Apiroutes:
         async def delete_reservation(id: str):
             return self.tempDefaultResponse()
 
-        # Vehicles
-
-        @self.App.post("/vehicles", response_model=ApiResponse)
-        async def create_vehicle():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/vehicles", response_model=ApiResponse)
-        async def get_vehicles():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/vehicles/{username}", response_model=ApiResponse)
-        async def get_user_vehicles(username: str):
-            return self.tempDefaultResponse()
-
-        @self.App.put("/vehicles/{plate_id}", response_model=ApiResponse)
-        async def update_vehicle(plate_id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.delete("/vehicles/{plate_id}", response_model=ApiResponse)
-        async def delete_vehicle(plate_id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.post("/vehicles/{id}/entry", response_model=ApiResponse)
-        async def vehicle_entry(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/vehicles/{id}/reservations", response_model=ApiResponse)
-        async def get_vehicle_reservations(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/vehicles/{id}/history", response_model=ApiResponse)
-        async def get_vehicle_history(id: str):
-            return self.tempDefaultResponse()
+        # Vehicles - handled by vehicle router
 
         # Payments
 
