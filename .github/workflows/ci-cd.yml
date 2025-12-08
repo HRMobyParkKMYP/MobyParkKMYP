@@ -20,13 +20,17 @@ jobs:
   test-build-deploy:
     runs-on: self-hosted
     
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIR }}
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      
+      - name: Verify Docker access
+        run: |
+          echo "Checking Docker installation..."
+          docker --version
+          echo "Checking Docker daemon..."
+          docker ps
+          echo "Docker access verified ✓"
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -34,6 +38,7 @@ jobs:
           python-version: '3.11'
       
       - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
@@ -43,17 +48,18 @@ jobs:
           fi
       
       - name: Install test dependencies
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           pip install pytest pytest-cov pytest-asyncio httpx
       
       - name: Run tests
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           export PYTHONPATH="${PYTHONPATH}:$(pwd)/api"
           pytest test/ -v --cov=api --cov-report=term-missing || echo "Tests completed with warnings"
         continue-on-error: false
       
       - name: Build Docker image
-        working-directory: .
         run: |
           docker build -f Parking-api-new/Dockerfile -t ${{ env.DOCKER_IMAGE }}:${{ github.sha }} ./Parking-api-new
           docker tag ${{ env.DOCKER_IMAGE }}:${{ github.sha }} ${{ env.DOCKER_IMAGE }}:latest
@@ -71,8 +77,6 @@ jobs:
             --name ${{ env.APP_NAME }} \
             --restart unless-stopped \
             -p ${{ env.HOST_PORT }}:${{ env.CONTAINER_PORT }} \
-            -v $(pwd)/api/data:/app/api/data \
-            -v $(pwd)/api/systemlogs:/app/api/systemlogs \
             -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
             -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
             ${{ env.DOCKER_IMAGE }}:latest
