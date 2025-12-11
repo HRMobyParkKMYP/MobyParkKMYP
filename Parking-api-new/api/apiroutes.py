@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from account import account
 from profiles import profile
 from vehicle import vehicle
+from billing import billing
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
@@ -45,6 +46,7 @@ class Apiroutes:
         self.App.include_router(account.router, tags=["Account"])
         self.App.include_router(profile.router, tags=["Profile"])        
         self.App.include_router(vehicle.router, tags=["Vehicle"])
+        self.App.include_router(billing.router, tags=["Billing"])
         
     def SetupRoutes(self) -> None:
 
@@ -52,7 +54,7 @@ class Apiroutes:
         async def root():
             return self.tempDefaultResponse()
 
-        @self.app.get("/health")
+        @self.App.get("/health")
         async def health_check():
             return {"status": "healthy"}
         # User
@@ -152,15 +154,6 @@ class Apiroutes:
             return self.tempDefaultResponse()
 
         # Billing
-
-        @self.App.get("/billing", response_model=ApiResponse)
-        async def get_billing():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/billing/{username}", response_model=ApiResponse)
-        async def get_user_billing(username: str):
-            return self.tempDefaultResponse()
-        
 
 def run():
     print("run")
