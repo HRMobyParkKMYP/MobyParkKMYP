@@ -3,9 +3,8 @@ from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
 from utils.session_manager import get_session
-from utils import database_utils as db
 from models.ParkingLot import ParkingLot
-import parking_lots.parking_lots_utils as db
+from . import parking_lots_utils as db
 
 router = APIRouter()
 

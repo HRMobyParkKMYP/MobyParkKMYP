@@ -1,13 +1,6 @@
 import pytest
 import requests
 import uuid
-import sys
-import os
-from datetime import datetime
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from api.utils import database_utils, auth_utils
 
 BASE_URL = "http://localhost:8000"
 
@@ -32,29 +25,18 @@ def login_user(username, password):
     return None
 
 def get_admin_token():
-    """Create admin directly in DB using create_admin_user(). Return session token."""
-    unique_id = uuid.uuid4().hex[:6]
-    username = f"admin_{unique_id}"
-    email = f"admin_{unique_id}@test.com"
-    phone = f"+3160{unique_id}"
-
-    hashed_pw, salt = auth_utils.hash_password_bcrypt("admin_pw")
-
-    # Create admin directly in DB
-    database_utils.create_admin_user(
-        username=username,
-        password_hash=hashed_pw,
-        name="Admin User",
-        email=email,
-        phone=phone,
-        birth_year=1980,
-        role="ADMIN",
-        hash_v="bcrypt",
-        salt=salt
-    )
-
-    # Login normally to get session token
-    return login_user(username, "admin_pw")
+    """Login with the admin user created by create_test_db.py"""
+    # Use the admin user created by create_test_db.py
+    username = "admin"
+    password = "admin"
+    
+    token = login_user(username, password)
+    if token is None:
+        raise AssertionError(
+            f"Could not login as admin. Make sure to run 'python test/create_test_db.py' first "
+            f"to create the test database with admin user."
+        )
+    return token
 
 def get_user_token():
     """Get regular user token - creates unique user each time"""
