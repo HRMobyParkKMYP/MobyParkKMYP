@@ -66,17 +66,29 @@ jobs:
       
       - name: Deploy new container
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          FERNET_KEY: ${{ secrets.FERNET_KEY }}
+          API_HOST_IP: ${{ secrets.API_HOST_IP }}
+          API_HOST_PORT: ${{ secrets.API_HOST_PORT }}
         run: |
+          set -euo pipefail
+
+          # Fail fast if secrets are missing (prevents "-p :")
+          : "${FERNET_KEY:?Missing secret FERNET_KEY}"
+          : "${API_HOST_IP:?Missing secret API_HOST_IP}"
+          : "${API_HOST_PORT:?Missing secret API_HOST_PORT}"
+
           docker stop "${{ env.APP_NAME }}" 2>/dev/null || true
           docker rm "${{ env.APP_NAME }}" 2>/dev/null || true
 
+          # Map host port (HOST_PORT) -> container port (API_HOST_PORT)
           docker run -d \
             --name "${{ env.APP_NAME }}" \
             --restart unless-stopped \
-            -p "${{ secrets.API_HOST_PORT }}:${{ secrets.API_HOST_PORT }}" \
-            -e FERNET_KEY='${{ secrets.FERNET_KEY }}' \
-            -e API_HOST_IP='${{ secrets.API_HOST_IP }}' \
-            -e API_HOST_PORT='${{ secrets.API_HOST_PORT }}' \
+            -p "${{ env.HOST_PORT }}:${API_HOST_PORT}" \
+            -e FERNET_KEY="${FERNET_KEY}" \
+            -e API_HOST_IP="${API_HOST_IP}" \
+            -e API_HOST_PORT="${API_HOST_PORT}" \
             "${{ env.DOCKER_IMAGE }}:latest"
       
       - name: Health check (inside container)
