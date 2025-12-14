@@ -95,7 +95,7 @@ jobs:
       - name: Health check (inside container)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          max_attempts=20
+          max_attempts=3
           for i in $(seq 1 $max_attempts); do
             if docker exec "${{ env.APP_NAME }}" curl -fsS \
               "http://localhost:${{ secrets.API_HOST_PORT }}/openapi.json" >/dev/null; then
