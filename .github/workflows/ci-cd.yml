@@ -73,8 +73,6 @@ jobs:
           API_HOST_PORT: ${{ secrets.API_HOST_PORT }}
         run: |
           set -euo pipefail
-
-          # Fail fast if secrets are missing (prevents "-p :")
           : "${FERNET_KEY:?Missing secret FERNET_KEY}"
           : "${API_HOST_IP:?Missing secret API_HOST_IP}"
           : "${API_HOST_PORT:?Missing secret API_HOST_PORT}"
@@ -82,7 +80,6 @@ jobs:
           docker stop "${{ env.APP_NAME }}" 2>/dev/null || true
           docker rm "${{ env.APP_NAME }}" 2>/dev/null || true
 
-          # Map host port (HOST_PORT) -> container port (API_HOST_PORT)
           docker run -d \
             --name "${{ env.APP_NAME }}" \
             --restart unless-stopped \

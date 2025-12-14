@@ -11,4 +11,5 @@ API_HOST_IP=${API_HOST_IP}
 API_HOST_PORT=${API_HOST_PORT}
 EOF
 
-exec uvicorn server:api --host "${API_HOST_IP}" --port "${API_HOST_PORT}"
+cd /app/api
+exec python server.py
