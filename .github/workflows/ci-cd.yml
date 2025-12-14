@@ -66,52 +66,34 @@ jobs:
       
       - name: Deploy new container
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        env:
-          FERNET_KEY: ${{ secrets.FERNET_KEY }}
-          API_HOST_IP: ${{ secrets.API_HOST_IP }}
-          API_HOST_PORT: ${{ secrets.API_HOST_PORT }}
         run: |
-          set -euo pipefail
-
-          # Create a temp env-file readable only by current user
-          umask 077
-          ENV_FILE="$(mktemp)"
-          trap 'rm -f "$ENV_FILE"' EXIT
-
-          {
-            printf 'FERNET_KEY=%s\n' "$FERNET_KEY"
-            printf 'API_HOST_IP=%s\n' "$API_HOST_IP"
-            printf 'API_HOST_PORT=%s\n' "$API_HOST_PORT"
-          } > "$ENV_FILE"
-
           docker stop "${{ env.APP_NAME }}" 2>/dev/null || true
           docker rm "${{ env.APP_NAME }}" 2>/dev/null || true
 
           docker run -d \
             --name "${{ env.APP_NAME }}" \
             --restart unless-stopped \
-            -p "${{ env.HOST_PORT }}:${{ env.CONTAINER_PORT }}" \
-            --env-file "$ENV_FILE" \
+            -p "${{ secrets.API_HOST_PORT }}:${{ secrets.API_HOST_PORT }}" \
+            -e FERNET_KEY='${{ secrets.FERNET_KEY }}' \
+            -e API_HOST_IP='${{ secrets.API_HOST_IP }}' \
+            -e API_HOST_PORT='${{ secrets.API_HOST_PORT }}' \
             "${{ env.DOCKER_IMAGE }}:latest"
       
-      - name: Health check
+      - name: Health check (inside container)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          max_attempts=10
-          attempt=0
-          
-          while [ $attempt -lt $max_attempts ]; do
-            if curl -f http://localhost:${{ env.HOST_PORT }}/ 2>/dev/null; then
-              echo "Health check passed!"
+          max_attempts=20
+          for i in $(seq 1 $max_attempts); do
+            if docker exec "${{ env.APP_NAME }}" curl -fsS \
+              "http://localhost:${{ secrets.API_HOST_PORT }}/openapi.json" >/dev/null; then
+              echo "Health check passed"
               exit 0
             fi
-            echo "Attempt $((attempt+1))/$max_attempts failed, retrying..."
-            sleep 3
-            attempt=$((attempt+1))
+            echo "Attempt $i/$max_attempts failed, retrying..."
+            docker logs --tail 50 "${{ env.APP_NAME }}" || true
+            sleep 2
           done
-          
-          echo "Health check failed after $max_attempts attempts"
-          docker logs ${{ env.APP_NAME }}
+          echo "Health check failed"
           exit 1
       
       - name: Clean up old images
