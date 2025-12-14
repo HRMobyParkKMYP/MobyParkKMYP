@@ -11,4 +11,4 @@ API_HOST_IP=${API_HOST_IP}
 API_HOST_PORT=${API_HOST_PORT}
 EOF
 
-exec uvicorn server:app --host "${API_HOST_IP}" --port "${API_HOST_PORT}"
+exec uvicorn server:api --host "${API_HOST_IP}" --port "${API_HOST_PORT}"
