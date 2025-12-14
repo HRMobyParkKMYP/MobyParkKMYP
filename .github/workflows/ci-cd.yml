@@ -19,6 +19,7 @@ env:
 jobs:
   test-build-deploy:
     runs-on: ubuntu-latest
+    environment: mobypark-api
     
     defaults:
       run:
