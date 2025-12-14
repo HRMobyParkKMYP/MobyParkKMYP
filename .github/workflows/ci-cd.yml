@@ -67,21 +67,21 @@ jobs:
       - name: Deploy new container
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         env:
-          FERNET_KEY: ${{ secrets.FERNET_KEY  }}
+          FERNET_KEY: ${{ secrets.FERNET_KEY }}
           API_HOST_IP: ${{ secrets.API_HOST_IP }}
           API_HOST_PORT: ${{ secrets.API_HOST_PORT }}
         run: |
           set -euo pipefail
 
+          # Create a temp env-file readable only by current user
           umask 077
           ENV_FILE="$(mktemp)"
           trap 'rm -f "$ENV_FILE"' EXIT
 
           {
-            echo "API_HOST_IP=0.0.0.0"
-            echo "API_HOST_PORT=8000"
-            printf 'DATABASE_URL=%s\n' "$DATABASE_URL"
-            printf 'SECRET_KEY=%s\n' "$SECRET_KEY"
+            printf 'FERNET_KEY=%s\n' "$FERNET_KEY"
+            printf 'API_HOST_IP=%s\n' "$API_HOST_IP"
+            printf 'API_HOST_PORT=%s\n' "$API_HOST_PORT"
           } > "$ENV_FILE"
 
           docker stop "${{ env.APP_NAME }}" 2>/dev/null || true
