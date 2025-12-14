@@ -48,7 +48,7 @@ class Apiroutes:
         async def root():
             return self.tempDefaultResponse()
 
-        @self.app.get("/health")
+        @self.App.get("/health")
         async def health_check():
             return {"status": "healthy"}
         # User
