@@ -2,6 +2,8 @@ import pytest
 import requests
 import uuid
 from datetime import datetime
+#from api.paymentsv2 import payments
+
 
 BASE_URL = "http://localhost:8000"
 
@@ -35,10 +37,9 @@ def auth_tokens():
 
 # POST /payments tests
 def test_create_payment_success(auth_tokens):
-    token, _ = auth_tokens
+    token = auth_tokens
     tx = "tx-" + datetime.now().strftime("%Y%m%d%H%M%S")
-    data = {"transaction": tx, "amount": 150}
-    res = requests.post(f"{BASE_URL}/payments", headers={"Authorization": token}, json=data)
+    res = requests.post(f"{BASE_URL}/payments", headers={"Authorization": token}, json={"transaction": tx, "amount": 150})
     assert res.status_code == 201
     body = res.json()
     assert body["status"] == "Success"
@@ -46,7 +47,7 @@ def test_create_payment_success(auth_tokens):
 
 
 def test_create_payment_missing_field(auth_tokens):
-    token, _ = auth_tokens
+    token = auth_tokens
     res = requests.post(f"{BASE_URL}/payments", headers={"Authorization": token}, json={"amount": 100})
     assert res.status_code == 400
     assert "Require field missing" in res.text
@@ -72,7 +73,7 @@ def test_create_payment_missing_field(auth_tokens):
 
 # PUT /payments/{tx} tests
 def test_update_payment_success(auth_tokens):
-    token, _ = auth_tokens
+    token = auth_tokens
     tx = "tx-" + datetime.now().strftime("%Y%m%d%H%M%S")
     create = requests.post(f"{BASE_URL}/payments", headers={"Authorization": token}, json={"transaction": tx, "amount": 60})
     payment_hash = create.json()["payment"]["hash"]
@@ -87,7 +88,7 @@ def test_update_payment_success(auth_tokens):
 
 
 def test_update_payment_invalid_hash(auth_tokens):
-    token, _ = auth_tokens
+    token = auth_tokens
     tx = "tx-" + datetime.now().strftime("%Y%m%d%H%M%S")
     requests.post(f"{BASE_URL}/payments", headers={"Authorization": token}, json={"transaction": tx, "amount": 30})
 
@@ -102,7 +103,7 @@ def test_update_payment_invalid_hash(auth_tokens):
 
 # GET /payments tests
 def test_get_own_payments(auth_tokens):
-    token, _ = auth_tokens
+    token = auth_tokens
     res = requests.get(f"{BASE_URL}/payments", headers={"Authorization": token})
     assert res.status_code == 200
     assert isinstance(res.json(), list)
