@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 from account import account
 from profiles import profile
 from vehicle import vehicle
+from parking_lots import parking_lots
+from reservations import reservations
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
@@ -45,6 +47,8 @@ class Apiroutes:
         self.App.include_router(account.router, tags=["Account"])
         self.App.include_router(profile.router, tags=["Profile"])        
         self.App.include_router(vehicle.router, tags=["Vehicle"])
+        self.App.include_router(parking_lots.router, tags=["Parking Lots"])
+        self.App.include_router(reservations.router, tags=["Reservations"])
         
     def SetupRoutes(self) -> None:
 
