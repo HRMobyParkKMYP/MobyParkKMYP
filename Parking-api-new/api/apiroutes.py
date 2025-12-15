@@ -10,6 +10,7 @@ from vehicle import vehicle
 from parking_lots import parking_lots
 from utils.database_utils import get_db_path
 from billing import billing
+from reservations import reservations
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
@@ -51,6 +52,7 @@ class Apiroutes:
         self.App.include_router(vehicle.router, tags=["Vehicle"])
         self.App.include_router(billing.router, tags=["Billing"])
         self.App.include_router(parking_lots.router, tags=["Parking Lots"])
+        self.App.include_router(reservations.router, tags=["Reservations"])
         
     def SetupRoutes(self) -> None:
 
@@ -81,22 +83,7 @@ class Apiroutes:
             return self.tempDefaultResponse()
 
         # Reservations
-
-        @self.App.post("/reservations", response_model=ApiResponse)
-        async def create_reservation():
-            return self.tempDefaultResponse()
-
-        @self.App.put("/reservations/{id}", response_model=ApiResponse)
-        async def update_reservation(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/reservations/{id}", response_model=ApiResponse)
-        async def get_reservation(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.delete("/reservations/{id}", response_model=ApiResponse)
-        async def delete_reservation(id: str):
-            return self.tempDefaultResponse()
+        # Real reservations endpoints are provided by the reservations router.
 
         # Vehicles - handled by vehicle router
 

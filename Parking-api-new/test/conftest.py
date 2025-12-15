@@ -63,11 +63,17 @@ def setup_test_environment():
     """Setup test environment before all tests"""
     # Set TEST_MODE environment variable
     os.environ['TEST_MODE'] = 'true'
+
+    # Ensure test database exists and mirror schema + admin via helper
+    try:
+        from create_test_db import create_test_database
+        create_test_database(with_admin=True)
+    except Exception as e:
+        print(f"[SETUP] create_test_database failed: {e}")
     
-    # Ensure test database exists
+    # Verify DB directory
     db_path = get_test_db_path()
     db_dir = os.path.dirname(db_path)
-    
     if not os.path.exists(db_dir):
         os.makedirs(db_dir)
     
@@ -78,11 +84,12 @@ def setup_test_environment():
         try:
             conn = sqlite3.connect(db_path)
             cursor = conn.cursor()
-            # Clear all test data
-            cursor.execute("DELETE FROM vehicles")
-            cursor.execute("DELETE FROM users")
+            # Clear all test data except admin
+            cursor.execute("DELETE FROM vehicles WHERE id > 0")
+            cursor.execute("DELETE FROM reservations WHERE id > 0")
+            cursor.execute("DELETE FROM users WHERE username != 'admin'")
             conn.commit()
             conn.close()
-            print("\n[CLEANUP] Test database cleaned")
+            print("\n[CLEANUP] Test database cleaned (preserved admin)")
         except Exception as e:
             print(f"\n[CLEANUP ERROR] {e}")
