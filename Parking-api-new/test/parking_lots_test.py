@@ -5,48 +5,19 @@ import uuid
 BASE_URL = "http://localhost:8000"
 
 # Helper functions
-def register_user(username, password, name, email, phone, birth_year):
-    """Register a new user"""
-    data = {
-        "username": username,
-        "password": password,
-        "name": name,
-        "email": email,
-        "phone": phone,
-        "birth_year": birth_year
-    }
-    return requests.post(f"{BASE_URL}/register", json=data)
-
-def login_user(username, password):
-    """Login user and return session token"""
-    res = requests.post(f"{BASE_URL}/login", json={"username": username, "password": password})
-    if res.status_code == 200:
-        return res.json().get("session_token")
-    return None
-
 def get_admin_token():
     """Login with the admin user created by create_test_db.py"""
-    # Use the admin user created by create_test_db.py
     username = "admin"
     password = "admin"
     
-    token = login_user(username, password)
-    if token is None:
-        raise AssertionError(
-            f"Could not login as admin. Make sure to run 'python test/create_test_db.py' first "
-            f"to create the test database with admin user."
-        )
-    return token
-
-def get_user_token():
-    """Get regular user token - creates unique user each time"""
-    unique_id = uuid.uuid4().hex[:6]
-    username = f"user_{unique_id}"
-    email = f"user_{unique_id}@test.com"
-    phone = f"+3161{unique_id}"
+    res = requests.post(f"{BASE_URL}/login", json={"username": username, "password": password})
+    if res.status_code == 200:
+        return res.json().get("session_token")
     
-    register_user(username, "user_pw", "Regular User", email, phone, 1990)
-    return login_user(username, "user_pw")
+    raise AssertionError(
+        f"Could not login as admin. Make sure to run 'python test/create_test_db.py' first "
+        f"to create the test database with admin user."
+    )
 
 # POST /parking-lots tests
 def test_create_parking_lot_success():
@@ -98,9 +69,13 @@ def test_create_parking_lot_invalid_token():
         headers={"Authorization": "invalid_token"})
     assert res.status_code == 401
 
-def test_create_parking_lot_non_admin():
+def test_create_parking_lot_non_admin(register_and_login):
     # 4. Aanmaak parkeerplaats door non-admin user
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     lot_data = {
         "name": "Test Lot",
@@ -213,9 +188,13 @@ def test_update_parking_lot_not_found():
         headers={"Authorization": admin_token})
     assert res.status_code == 404, f"Status: {res.status_code}, Response: {res.text}"
 
-def test_update_parking_lot_non_admin():
+def test_update_parking_lot_non_admin(register_and_login):
     # 3. Update parkeerplaats door non-admin user
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     update_data = {"capacity": 75}
     res = requests.put(f"{BASE_URL}/parking-lots/1", 
@@ -262,9 +241,13 @@ def test_delete_parking_lot_not_found():
         headers={"Authorization": admin_token})
     assert res.status_code == 404, f"Status: {res.status_code}, Response: {res.text}"
 
-def test_delete_parking_lot_non_admin():
+def test_delete_parking_lot_non_admin(register_and_login):
     # 3. Delete parkeerplaats door non-admin user
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     res = requests.delete(f"{BASE_URL}/parking-lots/1", 
         headers={"Authorization": user_token})
@@ -276,10 +259,14 @@ def test_delete_parking_lot_missing_token():
     assert res.status_code == 401
 
 # POST /parking-lots/{lot_id}/sessions/start tests
-def test_start_session_success():
+def test_start_session_success(register_and_login):
     # 1. Succesvolle start parkeersezie
     admin_token = get_admin_token()
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     # Eerst een parkeerplaats aanmaken
     lot_data = {
@@ -319,9 +306,13 @@ def test_start_session_invalid_token():
         headers={"Authorization": "invalid_token"})
     assert res.status_code == 401
 
-def test_start_session_missing_licenseplate():
+def test_start_session_missing_licenseplate(register_and_login):
     # 4. Start sessie zonder licenseplate
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     res = requests.post(f"{BASE_URL}/parking-lots/1/sessions/start", 
         json={}, 
@@ -329,9 +320,13 @@ def test_start_session_missing_licenseplate():
     # FastAPI returns 422 for validation errors
     assert res.status_code in (400, 422)
 
-def test_start_session_parking_lot_not_found():
+def test_start_session_parking_lot_not_found(register_and_login):
     # 5. Start sessie voor parkeerplaats die niet bestaat
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     session_data = {"licenseplate": "ABC123"}
     res = requests.post(f"{BASE_URL}/parking-lots/99999/sessions/start", 
@@ -339,10 +334,14 @@ def test_start_session_parking_lot_not_found():
         headers={"Authorization": user_token})
     assert res.status_code == 404
 
-def test_start_duplicate_session():
+def test_start_duplicate_session(register_and_login):
     # 6. Start dubbele sessie voor zelfde kenteken
     admin_token = get_admin_token()
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     # Eerst een parkeerplaats aanmaken
     lot_data = {
@@ -370,10 +369,14 @@ def test_start_duplicate_session():
         assert res.status_code == 409
 
 # POST /parking-lots/{lot_id}/sessions/stop tests
-def test_stop_session_success():
+def test_stop_session_success(register_and_login):
     # 1. Succesvolle stop parkeersezie
     admin_token = get_admin_token()
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     lot_data = {
         "name": "Stop Session Test",
@@ -402,9 +405,13 @@ def test_stop_session_success():
         assert res.status_code == 200
         assert b"stopped" in res.content.lower()
 
-def test_stop_session_no_active_session():
+def test_stop_session_no_active_session(register_and_login):
     # 2. Stop sessie wanneer geen actieve sessie bestaat
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     session_data = {"licenseplate": "NOACTIVE"}
     res = requests.post(f"{BASE_URL}/parking-lots/1/sessions/stop", 
@@ -420,10 +427,14 @@ def test_stop_session_missing_token():
     assert res.status_code == 401
 
 # GET /parking-lots/{lot_id}/sessions tests
-def test_get_all_sessions_success():
+def test_get_all_sessions_success(register_and_login):
     # 1. Ophalen alle sessies voor parkeerplaats
     admin_token = get_admin_token()
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     lot_data = {
         "name": "Get Sessions Test",
@@ -449,19 +460,27 @@ def test_get_all_sessions_missing_token():
     res = requests.get(f"{BASE_URL}/parking-lots/1/sessions")
     assert res.status_code == 401
 
-def test_get_all_sessions_lot_not_found():
+def test_get_all_sessions_lot_not_found(register_and_login):
     # 3. Ophalen sessies voor parkeerplaats die niet bestaat
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     res = requests.get(f"{BASE_URL}/parking-lots/99999/sessions", 
         headers={"Authorization": user_token})
     assert res.status_code == 404
 
 # GET /parking-lots/{lot_id}/sessions/{session_id} tests
-def test_get_session_details_success():
+def test_get_session_details_success(register_and_login):
     # 1. Ophalen details enkele sessie
     admin_token = get_admin_token()
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     lot_data = {
         "name": "Session Details Test",
@@ -491,9 +510,13 @@ def test_get_session_details_success():
             assert res.status_code == 200
             assert b"DETAIL1" in res.content
 
-def test_get_session_details_not_found():
+def test_get_session_details_not_found(register_and_login):
     # 2. Ophalen sessie details die niet bestaat
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     res = requests.get(f"{BASE_URL}/parking-lots/1/sessions/99999", 
         headers={"Authorization": user_token})
@@ -505,10 +528,14 @@ def test_get_session_details_missing_token():
     assert res.status_code == 401
 
 # DELETE /parking-lots/{lot_id}/sessions/{session_id} tests
-def test_delete_session_success():
+def test_delete_session_success(register_and_login):
     # 1. Succesvolle delete sessie
     admin_token = get_admin_token()
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     lot_data = {
         "name": "Delete Session Test",
@@ -538,9 +565,13 @@ def test_delete_session_success():
             assert res.status_code == 200
             assert b"deleted" in res.content.lower()
 
-def test_delete_session_non_admin():
+def test_delete_session_non_admin(register_and_login):
     # 2. Delete sessie door non-admin user
-    user_token = get_user_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
     
     res = requests.delete(f"{BASE_URL}/parking-lots/1/sessions/1", 
         headers={"Authorization": user_token})
