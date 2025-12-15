@@ -1,11 +1,14 @@
 from fastapi import FastAPI, HTTPException
 from customlogger import Logger
 import constants
+import os
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 from account import account
 from profiles import profile
 from vehicle import vehicle
+from parking_lots import parking_lots
+from utils.database_utils import get_db_path
 from billing import billing
 
 class ApiResponse(BaseModel):
@@ -47,6 +50,7 @@ class Apiroutes:
         self.App.include_router(profile.router, tags=["Profile"])        
         self.App.include_router(vehicle.router, tags=["Vehicle"])
         self.App.include_router(billing.router, tags=["Billing"])
+        self.App.include_router(parking_lots.router, tags=["Parking Lots"])
         
     def SetupRoutes(self) -> None:
 
@@ -57,6 +61,15 @@ class Apiroutes:
         @self.App.get("/health")
         async def health_check():
             return {"status": "healthy"}
+        
+        @self.App.get("/debug/db-info")
+        async def db_info():
+            """Debug endpoint to verify which database is being used"""
+            return {
+                "test_mode": os.environ.get('TEST_MODE', 'false'),
+                "database_path": get_db_path(),
+                "database_name": os.path.basename(get_db_path())
+            }
         # User
 
         @self.App.get("/profile", response_model=ApiResponse)
@@ -65,50 +78,6 @@ class Apiroutes:
 
         @self.App.put("/profile", response_model=ApiResponse)
         async def update_profile():
-            return self.tempDefaultResponse()
-
-        # Parking Lot
-
-        @self.App.post("/parking-lots", response_model=ApiResponse)
-        async def create_parking_lot():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots", response_model=ApiResponse)
-        async def get_parking_lots():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots/{id}", response_model=ApiResponse)
-        async def get_parking_lot(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.put("/parking-lots/{id}", response_model=ApiResponse)
-        async def update_parking_lot(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.delete("/parking-lots/{id}", response_model=ApiResponse)
-        async def delete_parking_lot(id: str):
-            return self.tempDefaultResponse()
-
-        # Parking Lot Handling
-
-        @self.App.post("/parking-lots/{id}/sessions/start", response_model=ApiResponse)
-        async def start_parking_session(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.post("/parking-lots/{id}/sessions/stop", response_model=ApiResponse)
-        async def stop_parking_session(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots/{id}/sessions", response_model=ApiResponse)
-        async def get_parking_sessions(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots/{id}/sessions/{sid}", response_model=ApiResponse)
-        async def get_parking_session(id: str, sid: str):
-            return self.tempDefaultResponse()
-
-        @self.App.delete("/parking-lots/{id}/sessions/{sid}", response_model=ApiResponse)
-        async def delete_parking_session(id: str, sid: str):
             return self.tempDefaultResponse()
 
         # Reservations
