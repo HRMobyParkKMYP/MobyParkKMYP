@@ -65,50 +65,6 @@ class Apiroutes:
         async def update_profile():
             return self.tempDefaultResponse()
 
-        # Parking Lot
-
-        @self.App.post("/parking-lots", response_model=ApiResponse)
-        async def create_parking_lot():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots", response_model=ApiResponse)
-        async def get_parking_lots():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots/{id}", response_model=ApiResponse)
-        async def get_parking_lot(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.put("/parking-lots/{id}", response_model=ApiResponse)
-        async def update_parking_lot(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.delete("/parking-lots/{id}", response_model=ApiResponse)
-        async def delete_parking_lot(id: str):
-            return self.tempDefaultResponse()
-
-        # Parking Lot Handling
-
-        @self.App.post("/parking-lots/{id}/sessions/start", response_model=ApiResponse)
-        async def start_parking_session(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.post("/parking-lots/{id}/sessions/stop", response_model=ApiResponse)
-        async def stop_parking_session(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots/{id}/sessions", response_model=ApiResponse)
-        async def get_parking_sessions(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots/{id}/sessions/{sid}", response_model=ApiResponse)
-        async def get_parking_session(id: str, sid: str):
-            return self.tempDefaultResponse()
-
-        @self.App.delete("/parking-lots/{id}/sessions/{sid}", response_model=ApiResponse)
-        async def delete_parking_session(id: str, sid: str):
-            return self.tempDefaultResponse()
-
         # Reservations
 
         @self.App.post("/reservations", response_model=ApiResponse)

@@ -3,8 +3,8 @@ from typing import Optional
 import bcrypt
 from cryptography.fernet import Fernet
 from fastapi import HTTPException, Header
-from api import constants
-from api.utils import session_manager
+import constants
+from utils import session_manager
 
 _fernet = Fernet(constants.FERNET_KEY)
 
