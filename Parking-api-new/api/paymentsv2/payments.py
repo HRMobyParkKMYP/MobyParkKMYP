@@ -1,14 +1,12 @@
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional
 from datetime import datetime
 from utils.database_utils import execute_query, get_db_connection
 from utils.session_manager import get_session
 import uuid
-import hashlib
 
 router = APIRouter()
-
 
 # ---------- Helpers ----------
 
@@ -20,162 +18,115 @@ def require_auth(token: Optional[str]):
         raise HTTPException(status_code=401, detail="Invalid session token")
     return user
 
-
-def generate_transaction_hash(username: str = "") -> str:
-    """Unieke transaction ID voor betaling of refund"""
-    return f"tx-{uuid.uuid4()}"
-
-
-def generate_validation_hash(username: str = "") -> str:
-    """Unieke validation hash voor betaling"""
-    data = f"{username}-{datetime.now().timestamp()}-{uuid.uuid4()}"
-    return hashlib.sha256(data.encode('utf-8')).hexdigest()
-
+def generate_external_ref() -> str:
+    return f"pay_{uuid.uuid4().hex}"
 
 # ---------- Models ----------
 
 class CreatePaymentRequest(BaseModel):
-    transaction: str
+    reservation_id: Optional[int] = None
     amount: float
-
+    currency: str
+    method: str
 
 class UpdatePaymentRequest(BaseModel):
-    t_data: Dict[str, Any]
-    validation: str
-
-
-class RefundRequest(BaseModel):
-    amount: float
-    transaction: Optional[str] = None
-    coupled_to: Optional[str] = None
-
+    status: str
+    paid_at: Optional[datetime] = None
 
 # ---------- Endpoints ----------
 
 @router.post("/payments", status_code=201)
 async def create_payment(
     request: CreatePaymentRequest,
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None, alias="Authorization")
 ):
     user = require_auth(authorization)
 
-    payment_hash = generate_validation_hash(user["username"])
-    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    created_at = datetime.utcnow().isoformat()
+    external_ref = generate_external_ref()
 
-    query = """
-        INSERT INTO payments
-        (transaction, amount, initiator, created_at, completed, hash)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """
+    # Use NULL for p_session_id if you don't have a real session
+    p_session_id = None
 
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        try:
-            cursor.execute(query, (
-                request.transaction,
-                request.amount,
-                user["username"],
-                created_at,
-                None,
-                payment_hash
-            ))
-        except Exception:
-            raise HTTPException(status_code=409, detail="Payment already exists")
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO payments
+                (user_id, reservation_id, p_session_id, amount, currency, method, status, created_at, external_ref)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    user["id"],
+                    request.reservation_id,
+                    p_session_id,
+                    request.amount,
+                    request.currency,
+                    request.method,
+                    "initiated",  # <-- FIXED status
+                    created_at,
+                    external_ref
+                )
+            )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     return {
-        "status": "Success",
+        "status": "success",
         "payment": {
-            "transaction": request.transaction,
+            "reservation_id": request.reservation_id,
             "amount": request.amount,
-            "initiator": user["username"],
-            "created_at": created_at,
-            "completed": False,
-            "hash": payment_hash
+            "currency": request.currency,
+            "method": request.method,
+            "status": "initiated",
+            "external_ref": external_ref,
+            "p_session_id": p_session_id
         }
     }
 
-
-@router.put("/payments/{transaction}")
+@router.put("/payments/{external_ref}")
 async def update_payment(
-    transaction: str,
+    external_ref: str,
     request: UpdatePaymentRequest,
-    authorization: Optional[str] = Header(None)
+    authorization: Optional[str] = Header(None, alias="Authorization")
 ):
     require_auth(authorization)
 
-    payments = execute_query(
-        "SELECT * FROM payments WHERE transaction = ?",
-        (transaction,)
+    payment = execute_query(
+        "SELECT * FROM payments WHERE external_ref = ?",
+        (external_ref,)
     )
-    if not payments:
+
+    if not payment:
         raise HTTPException(status_code=404, detail="Payment not found")
 
-    payment = payments[0]
-    if payment["hash"] != request.validation:
-        raise HTTPException(status_code=401, detail="Validation failed")
+    paid_at = request.paid_at.isoformat() if request.paid_at else datetime.utcnow().isoformat()
 
-    completed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            UPDATE payments
-            SET completed = ?, t_data = ?
-            WHERE transaction = ?
-            """,
-            (completed_at, str(request.t_data), transaction)
-        )
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE payments
+                SET status = ?, paid_at = ?
+                WHERE external_ref = ?
+                """,
+                (
+                    request.status,
+                    paid_at,
+                    external_ref
+                )
+            )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-    return {"status": "Success"}
-
+    return {"status": "success"}
 
 @router.get("/payments")
-async def get_my_payments(authorization: Optional[str] = Header(None)):
+async def get_my_payments(authorization: Optional[str] = Header(None, alias="Authorization")):
     user = require_auth(authorization)
     return execute_query(
-        "SELECT * FROM payments WHERE initiator = ? OR processed_by = ?",
-        (user["username"], user["username"])
+        "SELECT * FROM payments WHERE user_id = ?",
+        (user["id"],)
     )
-
-
-@router.post("/payments/refund", status_code=201)
-async def create_refund(
-    request: RefundRequest,
-    authorization: Optional[str] = Header(None)
-):
-    user = require_auth(authorization)
-    if user.get("role") != "ADMIN":
-        raise HTTPException(status_code=403, detail="Access denied")
-
-    tx = request.transaction or generate_transaction_hash(user["username"])
-    payment_hash = generate_validation_hash(user["username"])
-    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO payments
-            (transaction, amount, processed_by, coupled_to, created_at, completed, hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                tx,
-                -abs(request.amount),
-                user["username"],
-                request.coupled_to,
-                created_at,
-                None,
-                payment_hash
-            )
-        )
-
-    return {
-        "status": "Success",
-        "payment": {
-            "transaction": tx,
-            "amount": -abs(request.amount),
-            "processed_by": user["username"],
-            "hash": payment_hash
-        }
-    }
