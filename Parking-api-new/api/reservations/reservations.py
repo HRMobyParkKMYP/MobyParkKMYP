@@ -8,18 +8,20 @@ from . import reservations_utils as db
 router = APIRouter()
 
 class ReservationCreateRequest(BaseModel):
-    licenseplate: str
-    startdate: str
-    enddate: str
-    parkinglot: int
-    user: Optional[str] = None
+    parking_lot_id: int
+    vehicle_id: int
+    start_time: str
+    end_time: str
+    status: Optional[str] = "pending"
+    cost: Optional[float] = None
 
 class ReservationUpdateRequest(BaseModel):
-    licenseplate: str
-    startdate: str
-    enddate: str
-    parkinglot: int
-    user: Optional[str] = None
+    parking_lot_id: Optional[int] = None
+    vehicle_id: Optional[int] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    status: Optional[str] = None
+    cost: Optional[float] = None
 
 # POST /reservations - Create reservation
 @router.post("/reservations")
@@ -32,32 +34,33 @@ async def create_reservation(data: ReservationCreateRequest, authorization: Opti
         raise HTTPException(status_code=401, detail="Unauthorized: invalid session")
     
     # Check if parking lot exists
-    parking_lot = db.get_parking_lot_by_id(data.parkinglot)
+    parking_lot = db.get_parking_lot_by_id(data.parking_lot_id)
     if not parking_lot:
         raise HTTPException(status_code=404, detail="Parking lot not found")
     
-    # Handle user field based on role
-    if session_user.get("role") == "ADMIN":
-        if not data.user:
-            raise HTTPException(status_code=400, detail="Required field missing: user")
-        username = data.user
-    else:
-        username = session_user.get("username")
+    # Get user_id from session
+    user_id = session_user.get("id")
+    if not user_id:
+        # Debug: print what's in session
+        import json
+        raise HTTPException(status_code=400, detail=f"User ID missing from session. Session data: {json.dumps(session_user)}")
     
     # Create reservation
     new_reservation = {
-        "licenseplate": data.licenseplate,
-        "startdate": data.startdate,
-        "enddate": data.enddate,
-        "parkinglot": data.parkinglot,
-        "user": username
+        "user_id": user_id,
+        "parking_lot_id": data.parking_lot_id,
+        "vehicle_id": data.vehicle_id,
+        "start_time": data.start_time,
+        "end_time": data.end_time,
+        "status": data.status or "pending",
+        "cost": data.cost
     }
     
     reservation_id = db.create_reservation(new_reservation)
     new_reservation["id"] = reservation_id
     
     # Update parking lot reserved count
-    db.increment_reserved_count(data.parkinglot)
+    db.increment_reserved_count(data.parking_lot_id)
     
     return {"status": "Success", "reservation": new_reservation}
 
@@ -76,7 +79,8 @@ async def get_reservation(rid: int, authorization: Optional[str] = Header(None))
         raise HTTPException(status_code=404, detail="Reservation not found")
     
     # Permission check: ADMIN or owner
-    if session_user.get("role") != "ADMIN" and session_user.get("username") != reservation.get("user"):
+    user_id = session_user.get("id")
+    if session_user.get("role") != "ADMIN" and user_id != reservation.get("user_id"):
         raise HTTPException(status_code=403, detail="Access denied")
     
     return reservation
@@ -96,30 +100,24 @@ async def update_reservation(rid: int, data: ReservationUpdateRequest, authoriza
     if not existing_reservation:
         raise HTTPException(status_code=404, detail="Reservation not found")
     
-    # Check if parking lot exists
-    parking_lot = db.get_parking_lot_by_id(data.parkinglot)
-    if not parking_lot:
-        raise HTTPException(status_code=404, detail="Parking lot not found")
+    # Permission check: ADMIN or owner
+    user_id = session_user.get("id")
+    if session_user.get("role") != "ADMIN" and user_id != existing_reservation.get("user_id"):
+        raise HTTPException(status_code=403, detail="Access denied")
     
-    # Handle user field based on role
-    if session_user.get("role") == "ADMIN":
-        if not data.user:
-            raise HTTPException(status_code=400, detail="Required field missing: user")
-        username = data.user
-    else:
-        username = session_user.get("username")
+    # Check if parking lot exists (if being updated)
+    if data.parking_lot_id:
+        parking_lot = db.get_parking_lot_by_id(data.parking_lot_id)
+        if not parking_lot:
+            raise HTTPException(status_code=404, detail="Parking lot not found")
     
-    # Update reservation
-    updated_reservation = {
-        "id": rid,
-        "licenseplate": data.licenseplate,
-        "startdate": data.startdate,
-        "enddate": data.enddate,
-        "parkinglot": data.parkinglot,
-        "user": username
-    }
+    # Build updated fields
+    update_data = {k: v for k, v in data.dict(exclude_unset=True).items() if v is not None}
     
-    db.update_reservation(rid, updated_reservation)
+    db.update_reservation(rid, update_data)
+    
+    # Get updated reservation
+    updated_reservation = db.get_reservation_by_id(rid)
     
     return {"status": "Updated", "reservation": updated_reservation}
 
@@ -139,10 +137,11 @@ async def delete_reservation(rid: int, authorization: Optional[str] = Header(Non
         raise HTTPException(status_code=404, detail="Reservation not found")
     
     # Permission check: ADMIN or owner
-    if session_user.get("role") != "ADMIN" and session_user.get("username") != reservation.get("user"):
+    user_id = session_user.get("id")
+    if session_user.get("role") != "ADMIN" and user_id != reservation.get("user_id"):
         raise HTTPException(status_code=403, detail="Access denied")
     
-    parking_lot_id = reservation.get("parkinglot")
+    parking_lot_id = reservation.get("parking_lot_id")
     
     # Delete reservation
     db.delete_reservation(rid)

@@ -22,24 +22,33 @@ def create_reservation(data: dict) -> int:
     cursor = conn.cursor()
     try:
         cursor.execute("""
-            INSERT INTO reservations (licenseplate, startdate, enddate, parkinglot, user)
-            VALUES (?, ?, ?, ?, ?)
-        """, (data["licenseplate"], data["startdate"], data["enddate"], data["parkinglot"], data["user"]))
+            INSERT INTO reservations (user_id, parking_lot_id, vehicle_id, start_time, end_time, status, cost, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        """, (data["user_id"], data["parking_lot_id"], data["vehicle_id"], data["start_time"], data["end_time"], data.get("status", "pending"), data.get("cost")))
         conn.commit()
         return cursor.lastrowid
     finally:
         conn.close()
 
 def update_reservation(reservation_id: int, data: dict):
-    """Update reservation"""
+    """Update reservation - only updates provided fields"""
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     try:
-        cursor.execute("""
-            UPDATE reservations
-            SET licenseplate=?, startdate=?, enddate=?, parkinglot=?, user=?
-            WHERE id=?
-        """, (data["licenseplate"], data["startdate"], data["enddate"], data["parkinglot"], data["user"], reservation_id))
+        # Build dynamic update query
+        update_fields = []
+        values = []
+        for field in ["parking_lot_id", "vehicle_id", "start_time", "end_time", "status", "cost"]:
+            if field in data:
+                update_fields.append(f"{field}=?")
+                values.append(data[field])
+        
+        if not update_fields:
+            return  # Nothing to update
+        
+        query = f"UPDATE reservations SET {', '.join(update_fields)} WHERE id=?"
+        values.append(reservation_id)
+        cursor.execute(query, values)
         conn.commit()
     finally:
         conn.close()
