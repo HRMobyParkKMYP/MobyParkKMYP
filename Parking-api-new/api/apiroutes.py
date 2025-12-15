@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from account import account
 from profiles import profile
 from vehicle import vehicle
+from paymentsv2 import payments
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
@@ -45,6 +46,7 @@ class Apiroutes:
         self.App.include_router(account.router, tags=["Account"])
         self.App.include_router(profile.router, tags=["Profile"])        
         self.App.include_router(vehicle.router, tags=["Vehicle"])
+        self.App.include_router(payments.router, tags=["Payment"])
         
     def SetupRoutes(self) -> None:
 
@@ -52,7 +54,7 @@ class Apiroutes:
         async def root():
             return self.tempDefaultResponse()
 
-        @self.app.get("/health")
+        @self.App.get("/health")
         async def health_check():
             return {"status": "healthy"}
         # User
@@ -131,25 +133,25 @@ class Apiroutes:
 
         # Payments
 
-        @self.App.post("/payments", response_model=ApiResponse)
-        async def create_payment():
-            return self.tempDefaultResponse()
+        # @self.App.post("/payments", response_model=ApiResponse)
+        # async def create_payment():
+        #     return self.tempDefaultResponse()
 
-        @self.App.post("/payments/refund", response_model=ApiResponse)
-        async def refund_payment():
-            return self.tempDefaultResponse()
+        # @self.App.post("/payments/refund", response_model=ApiResponse)
+        # async def refund_payment():
+        #     return self.tempDefaultResponse()
 
-        @self.App.put("/payments/{transaction}", response_model=ApiResponse)
-        async def complete_payment(transaction: str):
-            return self.tempDefaultResponse()
+        # @self.App.put("/payments/{transaction}", response_model=ApiResponse)
+        # async def complete_payment(transaction: str):
+        #     return self.tempDefaultResponse()
 
-        @self.App.get("/payments", response_model=ApiResponse)
-        async def get_payments():
-            return self.tempDefaultResponse()
+        # @self.App.get("/payments", response_model=ApiResponse)
+        # async def get_payments():
+        #     return self.tempDefaultResponse()
 
-        @self.App.get("/payments/{username}", response_model=ApiResponse)
-        async def get_user_payments(username: str):
-            return self.tempDefaultResponse()
+        # @self.App.get("/payments/{username}", response_model=ApiResponse)
+        # async def get_user_payments(username: str):
+        #     return self.tempDefaultResponse()
 
         # Billing
 
