@@ -14,6 +14,9 @@ class Main():
             self.logger.info(e)
 
     def runApi(self):
+        """
+        runs an instance of fastapi and serves it with uvicorn
+        """
         self.logger.info("Starting API")
         api = run()
         uvicorn.run(api, host=constants.UVICORN_HOST_IP, port=constants.UVICORN_HOST_PORT)

@@ -13,7 +13,14 @@ class EncryptionHandler:
 
     def encryptAndHashPassword(self, data: str, salt: str) -> str:
         """
-        Encrypts and hashes data with a given salt
+        Docstring for encryptAndHashPassword
+
+        :param data: password string to encrypt
+        :type data: str
+        :param salt: salt string to encrypt
+        :type salt: str
+        :return: encrypted and hashed password
+        :rtype: str
         """
         try:
             enc_data = self.fn.encrypt(data)
@@ -24,6 +31,14 @@ class EncryptionHandler:
 
 
     def encrypt(self, data: str) -> str:
+        """
+        encrypts data
+        
+        :param data: any data you want encrypted
+        :type data: str
+        :return: encrypted data
+        :rtype: str
+        """
         try:
             enc_data = self.fn.encrypt(data)
             return str(enc_data)
@@ -33,6 +48,14 @@ class EncryptionHandler:
     
 
     def decrypt(self, data: str) -> str:
+        """
+        decrypts data
+        
+        :param data: Any data encrypted with the encrypt or encryptAndHashPassword function
+        :type data: str
+        :return: decrypted data
+        :rtype: str
+        """
         try:
             return str(self.fn.decrypt(data))
         

@@ -20,6 +20,16 @@ class Apiroutes:
 
 
     def FormatResponse(self, status_response: dict, content : Any) -> ApiResponse:
+        """
+        Docstring for FormatResponse
+        
+        :param status_response: status code with message
+        :type status_response: dict
+        :param content: body of the response, can contain anything
+        :type content: Any
+        :return: ApiResponse model instantiated from params
+        :rtype: ApiResponse
+        """
         return ApiResponse(StatusResponse=status_response, Content=content)
 
 
@@ -35,13 +45,18 @@ class Apiroutes:
         return {"Status": status, "StatusMessage": messages.get(status, "Unknown status code.")}
 
     def tempDefaultResponse(self) -> dict:
+        """
+        Temporary function for non implemented endpoints
+        """
         try:
             return self.FormatResponse(self.StatusResponse(201), {"status" : "success"})
         except Exception as e:
             return self.FormatResponse(self.StatusResponse(400), {"status" : "failed"})
     
     def SetupEndpoints(self) -> None:
-        """Include all endpoint routers"""
+        """
+        sets routes to the appropriate classes for improved modularity
+        """
         self.App.include_router(account.router, tags=["Account"])
         self.App.include_router(profile.router, tags=["Profile"])        
         self.App.include_router(vehicle.router, tags=["Vehicle"])
@@ -163,6 +178,9 @@ class Apiroutes:
         
 
 def run():
+    """
+    sets up an instance of the api
+    """
     print("run")
     api_instance = Apiroutes()
     return api_instance.App

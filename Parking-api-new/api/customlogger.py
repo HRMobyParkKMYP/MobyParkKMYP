@@ -10,9 +10,12 @@ class Logger:
         self.log_file_path = self.setupLogFile()
 
 
-    def setupLogFile(self):
+    def setupLogFile(self) -> str:
         """
-        Setup the log file and return the path to it.
+        sets up the logfile
+
+        :return: path to the logfile
+        :rtype: str
         """
 
         log_time = dt.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
