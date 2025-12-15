@@ -1,52 +1,79 @@
-from datetime import datetime
+from typing import List, Dict, Any
 from utils.database_utils import execute_query
-import bcrypt
-import math
-import uuid
-
-def calculate_price(parkinglot, sid, data):
-    """Bereken prijs voor parking sessie - uit session_calculator.py"""
-    price = 0
-    start = datetime.strptime(data["started"], "%d-%m-%Y %H:%M:%S")
-
-    if data.get("stopped"):
-        end = datetime.strptime(data["stopped"], "%d-%m-%Y %H:%M:%S")
-    else:
-        end = datetime.now()
-
-    diff = end - start
-    hours = math.ceil(diff.total_seconds() / 3600)
-
-    if diff.total_seconds() < 180:
-        price = 0
-    elif end.date() > start.date():
-        price = float(parkinglot.get("daytariff", 999)) * (diff.days + 1)
-    else:
-        price = float(parkinglot.get("tariff")) * hours
-
-        if price > float(parkinglot.get("daytariff", 999)):
-            price = float(parkinglot.get("daytariff", 999))
-
-    return (price, hours, diff.days + 1 if end.date() > start.date() else 0)
+from utils import session_calculator
 
 
-def generate_payment_hash(sid, data):
-    """Genereer payment hash - met bcrypt"""
-    hash_input = str(str(sid) + data["licenseplate"]).encode("utf-8")
-    return bcrypt.hashpw(hash_input, bcrypt.gensalt()).decode("utf-8")
-
-
-def generate_transaction_validation_hash():
-    """Genereer transactie validatie hash - uit session_calculator.py"""
-    return str(uuid.uuid4())
-
-
-def check_payment_amount(hash):
-    """Check betaald bedrag voor transactie - aangepast voor database"""
+def get_user_sessions(user_id: int) -> List[Dict[str, Any]]:
+    """Haal sessies op voor gebruiker met parking lot info"""
     query = """
-        SELECT SUM(amount) as total 
-        FROM payments 
-        WHERE external_ref = ? AND status = 'completed'
+        SELECT 
+            s.id as session_id,
+            s.license_plate as licenseplate,
+            s.started_at as started,
+            s.stopped_at as stopped,
+            pl.name,
+            pl.location,
+            pl.tariff,
+            pl.day_tariff as daytariff
+        FROM p_sessions s
+        JOIN parking_lots pl ON s.parking_lot_id = pl.id
+        WHERE s.user_id = ?
+        ORDER BY s.started_at DESC
     """
-    result = execute_query(query, (hash,))
-    return float(result[0]['total']) if result and result[0]['total'] else 0
+    return execute_query(query, (user_id,))
+
+
+def get_user_sessions_by_username(username: str) -> List[Dict[str, Any]]:
+    """Haal sessies op voor specifieke gebruiker met parking lot info"""
+    query = """
+        SELECT 
+            s.id as session_id,
+            s.license_plate as licenseplate,
+            s.started_at as started,
+            s.stopped_at as stopped,
+            pl.name,
+            pl.location,
+            pl.tariff,
+            pl.day_tariff as daytariff
+        FROM p_sessions s
+        JOIN parking_lots pl ON s.parking_lot_id = pl.id
+        JOIN users u ON s.user_id = u.id
+        WHERE u.username = ?
+        ORDER BY s.started_at DESC
+    """
+    return execute_query(query, (username,))
+
+
+def format_billing_data(sessions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Format sessie data naar billing response"""
+    data = []
+    for row in sessions:
+        # Maak parkinglot en session dicts voor calculate_price
+        parkinglot = {
+            "name": row["name"],
+            "location": row["location"],
+            "tariff": row["tariff"],
+            "daytariff": row["daytariff"]
+        }
+        
+        session = {
+            "licenseplate": row["licenseplate"],
+            "started": row["started"],
+            "stopped": row["stopped"]
+        }
+        
+        # Bereken prijs, uren en dagen
+        amount, hours, days = session_calculator.calculate_price(parkinglot, row["session_id"], session)
+        transaction = session_calculator.generate_payment_hash(row["session_id"], session)
+        payed = session_calculator.check_payment_amount(transaction)
+        
+        data.append({
+            "session": {k: v for k, v in session.items() if k in ["licenseplate", "started", "stopped"]} | {"hours": hours, "days": days},
+            "parking": {k: v for k, v in parkinglot.items() if k in ["name", "location", "tariff", "daytariff"]},
+            "amount": amount,
+            "thash": transaction,
+            "payed": payed,
+            "balance": amount - payed
+        })
+    
+    return data

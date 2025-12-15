@@ -11,7 +11,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 api_dir = os.path.abspath(os.path.join(script_dir, '..', 'api'))
 sys.path.insert(0, api_dir)
 
-from utils import auth_utils, database_utils
+from api.utils import auth_utils, database_utils
 
 def create_admin_user(username="admin", password="admin"):
     """Create an admin user using the same logic as account registration"""
