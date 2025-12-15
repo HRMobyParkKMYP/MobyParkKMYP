@@ -1,11 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from customlogger import Logger
 import constants
+import os
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 from account import account
 from vehicle import vehicle
 from parking_lots import parking_lots
+from utils.database_utils import get_db_path
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
@@ -55,6 +57,15 @@ class Apiroutes:
         @self.App.get("/health")
         async def health_check():
             return {"status": "healthy"}
+        
+        @self.App.get("/debug/db-info")
+        async def db_info():
+            """Debug endpoint to verify which database is being used"""
+            return {
+                "test_mode": os.environ.get('TEST_MODE', 'false'),
+                "database_path": get_db_path(),
+                "database_name": os.path.basename(get_db_path())
+            }
         # User
 
         @self.App.get("/profile", response_model=ApiResponse)

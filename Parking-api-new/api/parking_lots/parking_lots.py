@@ -219,7 +219,7 @@ async def get_all_sessions(lot_id: int, authorization: Optional[str] = Header(No
     
     # Admins see all sessions, users see only their own
     if session_user.get("role") != "ADMIN":
-        sessions = [s for s in sessions if s.get("user") == session_user["username"]]
+        sessions = [s for s in sessions if s.get("user_name") == session_user["username"]]
     
     return {"sessions": sessions}
 
@@ -239,11 +239,11 @@ async def get_session_details(lot_id: int, session_id: int, authorization: Optio
         raise HTTPException(status_code=404, detail="Parking lot not found")
     
     session_data = db.get_parking_session_by_id(session_id)
-    if not session_data or session_data.get("lot_id") != lot_id:
+    if not session_data or session_data.get("parking_lot_id") != lot_id:
         raise HTTPException(status_code=404, detail="Session not found")
     
     # Permission check: ADMIN or owner
-    if session_user.get("role") != "ADMIN" and session_user["username"] != session_data.get("user"):
+    if session_user.get("role") != "ADMIN" and session_user["username"] != session_data.get("user_name"):
         raise HTTPException(status_code=403, detail="Access denied")
     
     return session_data
@@ -267,7 +267,7 @@ async def delete_session(lot_id: int, session_id: int, authorization: Optional[s
         raise HTTPException(status_code=404, detail="Parking lot not found")
     
     session_data = db.get_parking_session_by_id(session_id)
-    if not session_data or session_data.get("lot_id") != lot_id:
+    if not session_data or session_data.get("parking_lot_id") != lot_id:
         raise HTTPException(status_code=404, detail="Session not found")
     
     db.delete_parking_session(session_id)
