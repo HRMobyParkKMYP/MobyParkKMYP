@@ -157,7 +157,5 @@ def test_get_payments_by_username(auth_token):
         headers={"Authorization": token_admin}
     )
     assert username is not None
-
-    #res = requests.get(f"{BASE_URL}/payments/{username}")
     assert res.status_code == 200
     assert isinstance(res.json(), list)
