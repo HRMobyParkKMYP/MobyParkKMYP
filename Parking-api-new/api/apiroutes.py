@@ -9,6 +9,7 @@ from profiles import profile
 from vehicle import vehicle
 from parking_lots import parking_lots
 from utils.database_utils import get_db_path
+from billing import billing
 from reservations import reservations
 
 class ApiResponse(BaseModel):
@@ -49,6 +50,7 @@ class Apiroutes:
         self.App.include_router(account.router, tags=["Account"])
         self.App.include_router(profile.router, tags=["Profile"])        
         self.App.include_router(vehicle.router, tags=["Vehicle"])
+        self.App.include_router(billing.router, tags=["Billing"])
         self.App.include_router(parking_lots.router, tags=["Parking Lots"])
         self.App.include_router(reservations.router, tags=["Reservations"])
         
@@ -108,15 +110,6 @@ class Apiroutes:
             return self.tempDefaultResponse()
 
         # Billing
-
-        @self.App.get("/billing", response_model=ApiResponse)
-        async def get_billing():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/billing/{username}", response_model=ApiResponse)
-        async def get_user_billing(username: str):
-            return self.tempDefaultResponse()
-        
 
 def run():
     print("run")
