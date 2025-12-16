@@ -27,7 +27,19 @@ def auth_token():
     ).json()["session_token"]
 
     return token
+def get_admin_token():
+    """Login with the admin user created by create_test_db.py"""
+    username = "admin"
+    password = "admin"
 
+    res = requests.post(f"{BASE_URL}/login", json={"username": username, "password": password})
+    if res.status_code == 200:
+        return res.json().get("session_token")
+
+    raise AssertionError(
+        f"Could not login as admin. Make sure to run 'python test/create_test_db.py' first "
+        f"to create the test database with admin user."
+    )
 
 # ---------- POST /payments ----------
 
