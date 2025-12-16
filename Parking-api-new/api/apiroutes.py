@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from account import account
 from profiles import profile
 from vehicle import vehicle
+from paymentsv2 import payments
 from parking_lots import parking_lots
 from utils.database_utils import get_db_path
 from billing import billing
@@ -50,6 +51,7 @@ class Apiroutes:
         self.App.include_router(account.router, tags=["Account"])
         self.App.include_router(profile.router, tags=["Profile"])        
         self.App.include_router(vehicle.router, tags=["Vehicle"])
+        self.App.include_router(payments.router, tags=["Payment"])
         self.App.include_router(billing.router, tags=["Billing"])
         self.App.include_router(parking_lots.router, tags=["Parking Lots"])
         self.App.include_router(reservations.router, tags=["Reservations"])
@@ -87,27 +89,7 @@ class Apiroutes:
 
         # Vehicles - handled by vehicle router
 
-        # Payments
-
-        @self.App.post("/payments", response_model=ApiResponse)
-        async def create_payment():
-            return self.tempDefaultResponse()
-
-        @self.App.post("/payments/refund", response_model=ApiResponse)
-        async def refund_payment():
-            return self.tempDefaultResponse()
-
-        @self.App.put("/payments/{transaction}", response_model=ApiResponse)
-        async def complete_payment(transaction: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/payments", response_model=ApiResponse)
-        async def get_payments():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/payments/{username}", response_model=ApiResponse)
-        async def get_user_payments(username: str):
-            return self.tempDefaultResponse()
+        # Payments  
 
         # Billing
 
