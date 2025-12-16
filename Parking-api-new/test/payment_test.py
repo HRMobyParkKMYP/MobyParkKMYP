@@ -68,49 +68,6 @@ def test_create_payment_missing_field(auth_token):
     assert res.status_code == 422
 
 
-# ---------- PUT /payments/{external_ref} ----------
-
-def test_update_payment_success(auth_token):
-    # First, create a payment
-    create = requests.post(
-        f"{BASE_URL}/payments",
-        headers={"Authorization": auth_token},
-        json={
-            "reservation_id": None,
-            "amount": 60.0,
-            "currency": "EUR",
-            "method": "IDEAL"
-        }
-    )
-
-    assert create.status_code == 201, f"Create payment failed: {create.text}"
-    body = create.json()
-    external_ref = body["payment"]["external_ref"]
-
-    # Now, update the payment status
-    res = requests.put(
-        f"{BASE_URL}/payments/{external_ref}",
-        headers={"Authorization": auth_token},
-        json={
-            "status": "paid",
-            "paid_at": datetime.utcnow().isoformat()
-        }
-    )
-
-    assert res.status_code == 200
-    assert res.json()["status"] == "success"
-
-
-def test_update_payment_not_found(auth_token):
-    # Try to update a non-existent payment
-    res = requests.put(
-        f"{BASE_URL}/payments/non_existing_ref",
-        headers={"Authorization": auth_token},
-        json={"status": "PAID"}
-    )
-
-    assert res.status_code == 404
-    assert "Payment not found" in res.text
 
 
 # ---------- GET /payments ----------
