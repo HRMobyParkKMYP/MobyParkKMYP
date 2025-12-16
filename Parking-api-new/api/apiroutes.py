@@ -131,27 +131,7 @@ class Apiroutes:
 
         # Vehicles - handled by vehicle router
 
-        # Payments
-
-        # @self.App.post("/payments", response_model=ApiResponse)
-        # async def create_payment():
-        #     return self.tempDefaultResponse()
-
-        # @self.App.post("/payments/refund", response_model=ApiResponse)
-        # async def refund_payment():
-        #     return self.tempDefaultResponse()
-
-        # @self.App.put("/payments/{transaction}", response_model=ApiResponse)
-        # async def complete_payment(transaction: str):
-        #     return self.tempDefaultResponse()
-
-        # @self.App.get("/payments", response_model=ApiResponse)
-        # async def get_payments():
-        #     return self.tempDefaultResponse()
-
-        # @self.App.get("/payments/{username}", response_model=ApiResponse)
-        # async def get_user_payments(username: str):
-        #     return self.tempDefaultResponse()
+        # Payments  
 
         # Billing
 
