@@ -130,3 +130,63 @@ async def get_my_payments(authorization: Optional[str] = Header(None, alias="Aut
         "SELECT * FROM payments WHERE user_id = ?",
         (user["id"],)
     )
+
+# ---------- Additional Endpoints (for apiroutes compatibility) ----------
+
+@router.post("/payments/refund")
+async def refund_payment(
+    external_ref: str,
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    require_auth(authorization)
+
+    payment = execute_query(
+        "SELECT * FROM payments WHERE external_ref = ?",
+        (external_ref,)
+    )
+
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE payments
+                SET status = ?
+                WHERE external_ref = ?
+                """,
+                ("refunded", external_ref)
+            )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"status": "success", "message": "Payment refunded"}
+
+
+# Alias endpoint — same logic as update_payment
+@router.put("/payments/{transaction}")
+async def complete_payment(
+    transaction: str,
+    request: UpdatePaymentRequest,
+    authorization: Optional[str] = Header(None, alias="Authorization")
+):
+    # Reuse existing logic exactly
+    return await update_payment(transaction, request, authorization)
+
+
+@router.get("/payments/{username}")
+async def get_user_payments(username: str):
+    payments = execute_query(
+        """
+        SELECT p.*
+        FROM payments p
+        JOIN users u ON u.id = p.user_id
+        WHERE u.username = ?
+        """,
+        (username,)
+    )
+
+    return payments
+
