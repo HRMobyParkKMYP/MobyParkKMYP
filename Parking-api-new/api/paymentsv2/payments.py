@@ -11,6 +11,7 @@ from utils.payment_utils import (
     get_payment_by_external_ref,
     get_user_payments_db
 )
+from discounts.discount_utils import apply_discount_to_payment, get_discount_by_code
 
 router = APIRouter()
 
@@ -31,6 +32,7 @@ class CreatePaymentRequest(BaseModel):
     amount: float
     currency: str
     method: str
+    discount_code: Optional[str] = None
 
 class UpdatePaymentRequest(BaseModel):
     status: str
@@ -45,19 +47,50 @@ async def create_payment(
 ):
     user = require_auth(authorization)
 
+    # Validate and apply discount if provided
+    final_amount = request.amount
+    discount_id = None
+    discount_code_used = None
+    
+    if request.discount_code:
+        success, final_amount, error_msg = apply_discount_to_payment(
+            request.discount_code,
+            request.amount
+        )
+        if not success:
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Get discount ID for storage
+        discount = get_discount_by_code(request.discount_code)
+        if discount:
+            discount_id = discount.get("id")
+            discount_code_used = request.discount_code
+
     # Use NULL for p_session_id if you don't have a real session
     p_session_id = None
 
     payment = create_payment_db(
         user_id=user["id"],
         reservation_id=request.reservation_id,
-        amount=request.amount,
+        amount=final_amount,  # Use discounted amount
         currency=request.currency,
         method=request.method,
-        p_session_id=p_session_id
+        p_session_id=p_session_id,
+        discount_id=discount_id
     )
 
-    return {"status": "success", "payment": payment}
+    response = {"status": "success", "payment": payment}
+    
+    # Include discount information in response
+    if discount_code_used:
+        response["discount"] = {
+            "code": discount_code_used,
+            "original_amount": request.amount,
+            "final_amount": final_amount,
+            "discount_amount": request.amount - final_amount
+        }
+    
+    return response
 
 @router.get("/payments")
 async def get_my_payments(authorization: Optional[str] = Header(None, alias="Authorization")):
