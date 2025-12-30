@@ -1,8 +1,9 @@
+import os
 import pytest
 import requests
 import uuid
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
 # Helper functions
 def get_admin_token():

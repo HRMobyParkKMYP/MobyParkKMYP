@@ -1,8 +1,9 @@
+import os
 import pytest
 import requests
 from datetime import datetime
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
 # POST register tests
 def test_register_success():

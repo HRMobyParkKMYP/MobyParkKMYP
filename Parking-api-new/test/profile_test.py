@@ -6,7 +6,7 @@ from datetime import datetime
 import time
 import uuid
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
 def get_test_db_path():
     """Test database path"""
@@ -31,7 +31,7 @@ def cleanup_before_and_after_tests():
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         try:
-            cursor.execute("DELETE FROM users")
+            cursor.execute("DELETE FROM users WHERE username != 'admin'")
             conn.commit()
             print("Cleaned up test users before tests")
         except Exception:
@@ -46,7 +46,7 @@ def cleanup_before_and_after_tests():
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         try:
-            cursor.execute("DELETE FROM users")
+            cursor.execute("DELETE FROM users WHERE username != 'admin'")
             conn.commit()
             print("Cleaned up test users after tests")
         except Exception:
