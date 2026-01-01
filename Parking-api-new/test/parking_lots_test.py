@@ -292,21 +292,6 @@ def test_start_session_success(register_and_login):
         assert b"session" in res.content.lower()
         assert b"ABC123" in res.content
 
-def test_start_session_missing_token():
-    # 2. Start sessie zonder token
-    session_data = {"licenseplate": "ABC123"}
-    res = requests.post(f"{BASE_URL}/parking-lots/1/sessions/start", 
-        json=session_data)
-    assert res.status_code == 401
-
-def test_start_session_invalid_token():
-    # 3. Start sessie met ongeldig token
-    session_data = {"licenseplate": "ABC123"}
-    res = requests.post(f"{BASE_URL}/parking-lots/1/sessions/start", 
-        json=session_data, 
-        headers={"Authorization": "invalid_token"})
-    assert res.status_code == 401
-
 def test_start_session_missing_licenseplate(register_and_login):
     # 4. Start sessie zonder licenseplate
     unique_id = uuid.uuid4().hex[:6]
@@ -419,13 +404,6 @@ def test_stop_session_no_active_session(register_and_login):
         json=session_data, 
         headers={"Authorization": user_token})
     assert res.status_code in (404, 500), f"Status: {res.status_code}, Response: {res.text}"
-
-def test_stop_session_missing_token():
-    # 3. Stop sessie zonder token
-    session_data = {"licenseplate": "ABC123"}
-    res = requests.post(f"{BASE_URL}/parking-lots/1/sessions/stop", 
-        json=session_data)
-    assert res.status_code == 401
 
 # GET /parking-lots/{lot_id}/sessions tests
 def test_get_all_sessions_success(register_and_login):
@@ -591,3 +569,142 @@ def test_delete_session_not_found():
     res = requests.delete(f"{BASE_URL}/parking-lots/1/sessions/99999", 
         headers={"Authorization": admin_token})
     assert res.status_code == 404, f"Status: {res.status_code}, Response: {res.text}"
+
+# Capacity tests
+def test_start_session_without_account_within_capacity():
+    # Test: Iemand rijdt zonder account naar binnen (binnen capaciteit)
+    admin_token = get_admin_token()
+    
+    # Maak parkeerplaats aan
+    lot_data = {
+        "name": "Anonymous Test Lot",
+        "address": "777 Anonymous St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    assert create_res.status_code in (200, 201), f"Failed to create lot: {create_res.text}"
+    lot_id = create_res.json().get("lot_id")
+    
+    # Start sessie ZONDER authorization token
+    session_data = {"licenseplate": "ANON-123"}
+    res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", 
+        json=session_data)
+    
+    assert res.status_code == 200, f"Status: {res.status_code}, Response: {res.text}"
+    data = res.json()
+    assert "session" in data
+    assert data["session"]["licenseplate"] == "ANON-123"
+    assert data["session"]["user"] is None or data["session"]["user"] == "null"
+
+def test_start_session_parking_lot_full():
+    # Test: Parkeerplaats is helemaal vol
+    admin_token = get_admin_token()
+    
+    # Maak parkeerplaats aan met capaciteit van 2
+    lot_data = {
+        "name": "Full Lot Test",
+        "address": "888 Full St",
+        "capacity": 2,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    assert create_res.status_code in (200, 201), f"Failed to create lot: {create_res.text}"
+    lot_id = create_res.json().get("lot_id")
+    
+    # Start 2 sessies om de parkeerplaats vol te maken
+    session1 = {"licenseplate": "FULL-001"}
+    res1 = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", json=session1)
+    assert res1.status_code == 200, f"Failed to start session 1: {res1.text}"
+    
+    session2 = {"licenseplate": "FULL-002"}
+    res2 = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", json=session2)
+    assert res2.status_code == 200, f"Failed to start session 2: {res2.text}"
+    
+    # Probeer derde auto naar binnen te laten - moet falen
+    session3 = {"licenseplate": "FULL-003"}
+    res3 = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", json=session3)
+    
+    assert res3.status_code == 409, f"Expected 409, got {res3.status_code}: {res3.text}"
+    assert b"full" in res3.content.lower() or b"occupied" in res3.content.lower()
+
+def test_start_session_blocked_by_upcoming_reservation(register_and_login):
+    # Test: 1 plek over maar er staat een reservering over 10 minuten
+    from datetime import datetime, timedelta
+    
+    admin_token = get_admin_token()
+    
+    # Maak een user aan voor de reservering
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"resuser_{unique_id}", "user_pw", "Reservation User",
+        f"resuser_{unique_id}@test.com", f"+3162{unique_id}", 1990
+    )
+    
+    # Haal user info op om user_id te krijgen
+    profile_res = requests.get(f"{BASE_URL}/profile", headers={"Authorization": user_token})
+    assert profile_res.status_code == 200, f"Failed to get profile: {profile_res.text}"
+    user_id = profile_res.json().get("id")
+    assert user_id is not None, "Could not get user_id from profile"
+    
+    # Maak parkeerplaats aan met capaciteit van 1
+    lot_data = {
+        "name": "Reservation Block Test",
+        "address": "999 Reserved St",
+        "capacity": 1,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    assert create_res.status_code in (200, 201), f"Failed to create lot: {create_res.text}"
+    lot_id = create_res.json().get("lot_id")
+    
+    # Maak een vehicle aan voor de reservering (indien nodig)
+    vehicle_data = {
+        "license_plate": f"RES-{unique_id}",
+        "make": "Tesla",
+        "model": "Model 3",
+        "color": "Red"
+    }
+    vehicle_res = requests.post(f"{BASE_URL}/vehicles", 
+        json=vehicle_data, 
+        headers={"Authorization": user_token})
+    assert vehicle_res.status_code in (200, 201), f"Failed to create vehicle: {vehicle_res.text}"
+    vehicle_response = vehicle_res.json()
+    vehicle_id = vehicle_response.get("vehicle", {}).get("id")
+    
+    # Maak reservering die over 10 minuten start
+    start_time = datetime.now() + timedelta(minutes=10)
+    end_time = start_time + timedelta(hours=2)
+    
+    reservation_data = {
+        "parking_lot_id": lot_id,
+        "vehicle_id": vehicle_id,
+        "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "end_time": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "confirmed"
+    }
+    
+    res_res = requests.post(f"{BASE_URL}/reservations", 
+        json=reservation_data, 
+        headers={"Authorization": user_token})
+    assert res_res.status_code in (200, 201), f"Failed to create reservation: {res_res.text}"
+    
+    # Probeer nu iemand anders (of zonder account) naar binnen te laten
+    # Dit moet falen omdat de enige plek gereserveerd is
+    session_data = {"licenseplate": "BLOCKED-123"}
+    session_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", 
+        json=session_data)
+    
+    assert session_res.status_code == 409, f"Expected 409, got {session_res.status_code}: {session_res.text}"
+    response_text = session_res.content.lower()
+    assert b"full" in response_text or b"reservation" in response_text, \
+        f"Expected message about being full or reservation, got: {session_res.text}"

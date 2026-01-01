@@ -148,3 +148,37 @@ def delete_parking_session(session_id: int):
         conn.commit()
     finally:
         conn.close()
+
+def count_active_sessions(lot_id: int) -> int:
+    """Count active sessions (not yet stopped) in parking lot"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT COUNT(*) FROM p_sessions WHERE parking_lot_id = ? AND stopped_at IS NULL",
+            (lot_id,)
+        )
+        count = cursor.fetchone()[0]
+        return count
+    finally:
+        conn.close()
+
+def get_upcoming_reservations(lot_id: int, minutes: int = 15) -> List[Dict]:
+    """Get reservations starting within the next X minutes"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        # Get reservations that start within the next X minutes and are pending or confirmed
+        # Use localtime instead of 'now' to match the format used when creating reservations
+        cursor.execute("""
+            SELECT * FROM reservations 
+            WHERE parking_lot_id = ? 
+            AND status IN ('pending', 'confirmed')
+            AND datetime(start_time) <= datetime('now', 'localtime', '+' || ? || ' minutes')
+            AND datetime(start_time) >= datetime('now', 'localtime')
+        """, (lot_id, minutes))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+    finally:
+        conn.close()
