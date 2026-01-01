@@ -12,6 +12,7 @@ from parking_lots import parking_lots
 from utils.database_utils import get_db_path
 from billing import billing
 from reservations import reservations
+from discounts import discounts
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
@@ -55,6 +56,7 @@ class Apiroutes:
         self.App.include_router(billing.router, tags=["Billing"])
         self.App.include_router(parking_lots.router, tags=["Parking Lots"])
         self.App.include_router(reservations.router, tags=["Reservations"])
+        self.App.include_router(discounts.router, tags=["Discounts"])
         
     def SetupRoutes(self) -> None:
 
