@@ -6,7 +6,7 @@ import uuid
 def generate_external_ref() -> str:
     return f"pay_{uuid.uuid4().hex}"
 
-def create_payment_db(user_id: int, reservation_id: Optional[int], amount: float, currency: str, method: str, p_session_id: Optional[str] = None) -> Dict[str, Any]:
+def create_payment_db(user_id: int, reservation_id: Optional[int], amount: float, currency: str, method: str, p_session_id: Optional[str] = None, discount_id: Optional[int] = None) -> Dict[str, Any]:
     """DB logic for creating a payment"""
     created_at = datetime.utcnow().isoformat()
     external_ref = generate_external_ref()
