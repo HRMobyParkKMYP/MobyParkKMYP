@@ -45,6 +45,23 @@ async def create_reservation(data: ReservationCreateRequest, authorization: Opti
         import json
         raise HTTPException(status_code=400, detail=f"User ID missing from session. Session data: {json.dumps(session_user)}")
     
+    # CAPACITY CHECK: Ensure there's available capacity for this reservation
+    capacity = parking_lot.get("capacity", 0)
+    
+    # Count overlapping reservations during the requested time period
+    overlapping_reservations = db.get_overlapping_reservations(
+        data.parking_lot_id, 
+        data.start_time, 
+        data.end_time
+    )
+
+    # Check if there's capacity available
+    if overlapping_reservations >= capacity:
+        raise HTTPException(
+            status_code=409, 
+            detail=f"Parking lot is fully booked for the requested time. {overlapping_reservations}/{capacity} reservations already exist for this time period."
+        )
+    
     # Create reservation
     new_reservation = {
         "user_id": user_id,
@@ -110,6 +127,34 @@ async def update_reservation(rid: int, data: ReservationUpdateRequest, authoriza
         parking_lot = db.get_parking_lot_by_id(data.parking_lot_id)
         if not parking_lot:
             raise HTTPException(status_code=404, detail="Parking lot not found")
+    
+    # CAPACITY CHECK: If time or parking lot is being changed, verify capacity
+    if data.start_time or data.end_time or data.parking_lot_id:
+        # Determine the lot_id, start_time, and end_time to check
+        lot_id = data.parking_lot_id if data.parking_lot_id else existing_reservation.get("parking_lot_id")
+        start_time = data.start_time if data.start_time else existing_reservation.get("start_time")
+        end_time = data.end_time if data.end_time else existing_reservation.get("end_time")
+        
+        # Get parking lot capacity
+        lot_to_check = db.get_parking_lot_by_id(lot_id)
+        if lot_to_check:
+            capacity = lot_to_check.get("capacity", 0)
+            
+            # Count overlapping reservations (excluding this one)
+            overlapping_reservations = db.get_overlapping_reservations(
+                lot_id, 
+                start_time, 
+                end_time,
+                exclude_reservation_id=rid
+            )
+            
+            # Check if there's capacity available
+            # Note: We only check reservations, not current sessions, since this could be for a future date
+            if overlapping_reservations >= capacity:
+                raise HTTPException(
+                    status_code=409, 
+                    detail=f"Cannot update: parking lot is fully booked for the requested time. {overlapping_reservations}/{capacity} reservations already exist for this time period."
+                )
     
     # Build updated fields
     update_data = {k: v for k, v in data.dict(exclude_unset=True).items() if v is not None}

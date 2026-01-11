@@ -233,3 +233,208 @@ def test_delete_reservation_not_found(register_and_login):
     resp = requests.delete(f"{BASE_URL}/reservations/999999", headers=auth_headers(token), timeout=10)
     assert resp.status_code == 404
 
+
+def test_capacity_check_rejects_reservation_when_full(register_and_login):
+    """Test that reservation is rejected when parking lot capacity is exceeded"""
+    # Create user and lot with capacity of 2
+    admin_token = admin_login()
+    lot_id = create_lot_via_api(admin_token, capacity=2)
+
+    # Create first user and their reservation
+    user1_id = unique_identity()
+    user1_token = register_and_login(
+        f"user1_{user1_id}", "password", "User One", 
+        f"user1_{user1_id}@test.local", f"+31{hash(user1_id) % 900000000 + 100000000}", 1990
+    )
+
+    # User 1 creates first reservation
+    payload1 = {
+        "parking_lot_id": lot_id,
+        "vehicle_id": 1,
+        "start_time": "2025-12-20 10:00:00",
+        "end_time": "2025-12-20 12:00:00",
+    }
+    resp1 = requests.post(f"{BASE_URL}/reservations", json=payload1, headers=auth_headers(user1_token), timeout=10)
+    assert resp1.status_code in (200, 201), f"First reservation should succeed: {resp1.text}"
+
+    # Create second user and their reservation
+    user2_id = unique_identity()
+    user2_token = register_and_login(
+        f"user2_{user2_id}", "password", "User Two", 
+        f"user2_{user2_id}@test.local", f"+31{hash(user2_id) % 900000000 + 100000000}", 1991
+    )
+
+    # User 2 creates second reservation (should fill capacity)
+    payload2 = {
+        "parking_lot_id": lot_id,
+        "vehicle_id": 2,
+        "start_time": "2025-12-20 10:30:00",
+        "end_time": "2025-12-20 11:30:00",
+    }
+    resp2 = requests.post(f"{BASE_URL}/reservations", json=payload2, headers=auth_headers(user2_token), timeout=10)
+    assert resp2.status_code in (200, 201), f"Second reservation should succeed: {resp2.text}"
+
+    # Create third user
+    user3_id = unique_identity()
+    user3_token = register_and_login(
+        f"user3_{user3_id}", "password", "User Three", 
+        f"user3_{user3_id}@test.local", f"+31{hash(user3_id) % 900000000 + 100000000}", 1992
+    )
+
+    # User 3 tries to create third reservation (should be REJECTED - capacity full)
+    payload3 = {
+        "parking_lot_id": lot_id,
+        "vehicle_id": 3,
+        "start_time": "2025-12-20 11:00:00",
+        "end_time": "2025-12-20 12:00:00",
+    }
+    resp3 = requests.post(f"{BASE_URL}/reservations", json=payload3, headers=auth_headers(user3_token), timeout=10)
+    assert resp3.status_code == 409, f"Third reservation should be rejected due to capacity: {resp3.text}"
+    assert "fully booked" in resp3.text.lower() or "capacity" in resp3.text.lower()
+
+
+def test_capacity_check_allows_non_overlapping_reservations(register_and_login):
+    """Test that reservations are allowed if they don't overlap in time"""
+    admin_token = admin_login()
+    lot_id = create_lot_via_api(admin_token, capacity=1)
+    
+    # Create two users
+    user1_id = unique_identity()
+    user1_token = register_and_login(
+        f"user1_{user1_id}", "password", "User One", 
+        f"user1_{user1_id}@test.local", f"+31{hash(user1_id) % 900000000 + 100000000}", 1990
+    )
+    
+    user2_id = unique_identity()
+    user2_token = register_and_login(
+        f"user2_{user2_id}", "password", "User Two", 
+        f"user2_{user2_id}@test.local", f"+31{hash(user2_id) % 900000000 + 100000000}", 1991
+    )
+    
+    # User 1 books 10:00-12:00
+    payload1 = {
+        "parking_lot_id": lot_id,
+        "vehicle_id": 1,
+        "start_time": "2025-12-21 10:00:00",
+        "end_time": "2025-12-21 12:00:00",
+    }
+    resp1 = requests.post(f"{BASE_URL}/reservations", json=payload1, headers=auth_headers(user1_token), timeout=10)
+    assert resp1.status_code in (200, 201), f"First reservation should succeed: {resp1.text}"
+    
+    # User 2 books 13:00-15:00 (no overlap, should succeed even though capacity is 1)
+    payload2 = {
+        "parking_lot_id": lot_id,
+        "vehicle_id": 2,
+        "start_time": "2025-12-21 13:00:00",
+        "end_time": "2025-12-21 15:00:00",
+    }
+    resp2 = requests.post(f"{BASE_URL}/reservations", json=payload2, headers=auth_headers(user2_token), timeout=10)
+    assert resp2.status_code in (200, 201), f"Non-overlapping reservation should succeed: {resp2.text}"
+
+
+def test_capacity_check_on_reservation_update(register_and_login):
+    """Test that capacity is checked when updating reservation times"""
+    admin_token = admin_login()
+    lot_id = create_lot_via_api(admin_token, capacity=1)
+    
+    # Create two users
+    user1_id = unique_identity()
+    user1_token = register_and_login(
+        f"user1_{user1_id}", "password", "User One", 
+        f"user1_{user1_id}@test.local", f"+31{hash(user1_id) % 900000000 + 100000000}", 1990
+    )
+    
+    user2_id = unique_identity()
+    user2_token = register_and_login(
+        f"user2_{user2_id}", "password", "User Two", 
+        f"user2_{user2_id}@test.local", f"+31{hash(user2_id) % 900000000 + 100000000}", 1991
+    )
+    
+    # User 1 books 10:00-12:00
+    payload1 = {
+        "parking_lot_id": lot_id,
+        "vehicle_id": 1,
+        "start_time": "2025-12-22 10:00:00",
+        "end_time": "2025-12-22 12:00:00",
+    }
+    resp1 = requests.post(f"{BASE_URL}/reservations", json=payload1, headers=auth_headers(user1_token), timeout=10)
+    assert resp1.status_code in (200, 201)
+    res1_id = resp1.json().get("reservation", {}).get("id")
+    
+    # User 2 books 13:00-15:00 (no overlap)
+    payload2 = {
+        "parking_lot_id": lot_id,
+        "vehicle_id": 2,
+        "start_time": "2025-12-22 13:00:00",
+        "end_time": "2025-12-22 15:00:00",
+    }
+    resp2 = requests.post(f"{BASE_URL}/reservations", json=payload2, headers=auth_headers(user2_token), timeout=10)
+    assert resp2.status_code in (200, 201)
+    res2_id = resp2.json().get("reservation", {}).get("id")
+    
+    # User 2 tries to update their reservation to overlap with User 1 (should be rejected)
+    update_payload = {
+        "start_time": "2025-12-22 11:00:00",
+        "end_time": "2025-12-22 14:00:00",
+    }
+    update_resp = requests.put(
+        f"{BASE_URL}/reservations/{res2_id}",
+        json=update_payload,
+        headers=auth_headers(user2_token),
+        timeout=10
+    )
+    assert update_resp.status_code == 409, f"Update causing overlap should be rejected: {update_resp.text}"
+
+
+def test_capacity_independent_of_current_sessions(register_and_login):
+    """Test that reservation capacity check doesn't consider current active sessions"""
+    admin_token = admin_login()
+    lot_id = create_lot_via_api(admin_token, capacity=2)
+    
+    # Create user
+    user_id = unique_identity()
+    user_token = register_and_login(
+        f"user_{user_id}", "password", "User Test", 
+        f"user_{user_id}@test.local", f"+31{hash(user_id) % 900000000 + 100000000}", 1990
+    )
+    
+    # Start a parking session NOW (to simulate current occupation)
+    session_payload = {
+        "licenseplate": f"ABC-{unique_identity()[:3]}"
+    }
+    session_resp = requests.post(
+        f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json=session_payload,
+        headers=auth_headers(user_token),
+        timeout=10
+    )
+    # Session might succeed or fail depending on implementation, but we continue
+    
+    # Create reservation for TOMORROW - should NOT be affected by today's active session
+    # Even if there's 1 active session now, we should still be able to reserve 2 spots for tomorrow
+    payload1 = {
+        "parking_lot_id": lot_id,
+        "vehicle_id": 1,
+        "start_time": "2025-12-25 10:00:00",
+        "end_time": "2025-12-25 12:00:00",
+    }
+    resp1 = requests.post(f"{BASE_URL}/reservations", json=payload1, headers=auth_headers(user_token), timeout=10)
+    assert resp1.status_code in (200, 201), f"Future reservation should succeed regardless of current sessions: {resp1.text}"
+    
+    # Create a second user
+    user2_id = unique_identity()
+    user2_token = register_and_login(
+        f"user2_{user2_id}", "password", "User Two", 
+        f"user2_{user2_id}@test.local", f"+31{hash(user2_id) % 900000000 + 100000000}", 1991
+    )
+    
+    # Second reservation for same time should also succeed (capacity = 2)
+    payload2 = {
+        "parking_lot_id": lot_id,
+        "vehicle_id": 2,
+        "start_time": "2025-12-25 10:00:00",
+        "end_time": "2025-12-25 12:00:00",
+    }
+    resp2 = requests.post(f"{BASE_URL}/reservations", json=payload2, headers=auth_headers(user2_token), timeout=10)
+    assert resp2.status_code in (200, 201), f"Second future reservation should succeed: {resp2.text}"
+
