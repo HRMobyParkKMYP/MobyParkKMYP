@@ -89,7 +89,7 @@ jobs:
           docker stop ${{ env.APP_NAME }} 2>/dev/null || true
           docker rm ${{ env.APP_NAME }} 2>/dev/null || true
       
-      - name: Deploy new container on host
+      - name: Deploy new container on host 
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         env:
           FERNET_KEY: ${{ secrets.FERNET_KEY }}
