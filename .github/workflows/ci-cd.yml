@@ -15,11 +15,12 @@ env:
   CONTAINER_PORT: 8000
   HOST_PORT: 8000
   WORKING_DIR: Parking-api-new
-  DEPLOY_DIR: /opt/mobypark-deploy
+  HOST_DEPLOY_DIR: /opt/mobypark-deploy
+  RUNNER_DEPLOY_DIR: /host-deploy
 
 jobs:
   test-build-deploy:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     environment: mobypark-api
     
     steps:
@@ -66,21 +67,21 @@ jobs:
           docker build -f Parking-api-new/Dockerfile -t ${{ env.DOCKER_IMAGE }}:${{ github.sha }} ./Parking-api-new
           docker tag ${{ env.DOCKER_IMAGE }}:${{ github.sha }} ${{ env.DOCKER_IMAGE }}:latest
       
-      - name: Prepare deployment directory
+      - name: Prepare deployment directory on host
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          echo "Creating deployment directory..."
-          mkdir -p ${{ env.DEPLOY_DIR }}
+          echo "Creating deployment directory on host..."
+          mkdir -p ${{ env.RUNNER_DEPLOY_DIR }}
           
-          echo "Copying repository to deployment directory..."
+          echo "Copying repository to host deployment directory..."
           rsync -av --delete \
             --exclude '.git' \
             --exclude '_actions' \
             --exclude '_work' \
-            ./ ${{ env.DEPLOY_DIR }}/
+            ./ ${{ env.RUNNER_DEPLOY_DIR }}/
           
-          echo "Repository copied to ${{ env.DEPLOY_DIR }}"
-          ls -la ${{ env.DEPLOY_DIR }}
+          echo "Repository copied to host at ${{ env.HOST_DEPLOY_DIR }}"
+          ls -la ${{ env.RUNNER_DEPLOY_DIR }}
       
       - name: Stop old container
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -88,15 +89,14 @@ jobs:
           docker stop ${{ env.APP_NAME }} 2>/dev/null || true
           docker rm ${{ env.APP_NAME }} 2>/dev/null || true
       
-      - name: Deploy new container
+      - name: Deploy new container on host
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         env:
           FERNET_KEY: ${{ secrets.FERNET_KEY }}
           API_HOST_IP: ${{ secrets.API_HOST_IP }}
           API_HOST_PORT: ${{ secrets.API_HOST_PORT }}
         run: |
-          cd ${{ env.DEPLOY_DIR }}
-          
+          # Deploy using host paths, not runner container paths
           docker run -d \
             --name "${{ env.APP_NAME }}" \
             --restart unless-stopped \
@@ -106,7 +106,7 @@ jobs:
             -e FERNET_KEY="${{ secrets.FERNET_KEY }}" \
             -e API_HOST_IP="${{ secrets.API_HOST_IP }}" \
             -e API_HOST_PORT="${{ secrets.API_HOST_PORT }}" \
-            -v ${{ env.DEPLOY_DIR }}/${{ env.WORKING_DIR }}/parking.sqlite3:/app/parking.sqlite3 \
+            -v ${{ env.HOST_DEPLOY_DIR }}/${{ env.WORKING_DIR }}/parking.sqlite3:/app/parking.sqlite3 \
             ${{ env.DOCKER_IMAGE }}:latest
           
           echo "Waiting for container to start..."
