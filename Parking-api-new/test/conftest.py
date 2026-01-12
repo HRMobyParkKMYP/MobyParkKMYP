@@ -1,6 +1,7 @@
 import os
 import socket
 import sqlite3
+import uuid
 import sys
 import threading
 import time
@@ -112,12 +113,46 @@ def register_and_login():
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_environment():
     """Setup test environment before all tests"""
+    # Set TEST_MODE environment variable FIRST
+    os.environ['TEST_MODE'] = 'true'
+
     # Ensure test database exists and mirror schema + admin via helper
+    db_path = get_test_db_path()
     try:
-        from create_test_db import create_test_database
-        create_test_database(with_admin=True)
+        # Import and run the combined setup script
+        import sys
+        setup_script_dir = os.path.dirname(os.path.abspath(__file__))
+        if setup_script_dir not in sys.path:
+            sys.path.insert(0, setup_script_dir)
+        
+        # Add API directory to path
+        api_dir = os.path.join(setup_script_dir, '..', 'api')
+        if api_dir not in sys.path:
+            sys.path.insert(0, os.path.abspath(api_dir))
+        
+        # Import the setup module
+        import setup_parking_lot_manager_tests as setup_script
+        
+        # Create test database
+        print("\n[SETUP] Creating test database...")
+        success = setup_script.create_test_database()
+        if not success:
+            print("[SETUP ERROR] Failed to create test database")
+        else:
+            print("[SETUP] Test database created successfully")
+        
+        # Create admin user
+        print("[SETUP] Creating admin user...")
+        success = setup_script.create_admin_user()
+        if not success:
+            print("[SETUP ERROR] Failed to create admin user")
+        else:
+            print("[SETUP] Admin user created successfully")
+            
     except Exception as e:
-        print(f"[SETUP] create_test_database failed: {e}")
+        print(f"[SETUP] setup failed: {e}")
+        import traceback
+        traceback.print_exc()
     
     # Verify DB directory
     db_path = get_test_db_path()
@@ -152,3 +187,47 @@ def setup_test_environment():
             print("\n[CLEANUP] Test database cleaned (preserved admin)")
         except Exception as e:
             print(f"\n[CLEANUP ERROR] {e}")
+
+
+@pytest.fixture
+def admin_token():
+    """Login as admin and return session token"""
+    res = requests.post(
+        f"{BASE_URL}/login",
+        json={"username": "admin", "password": "admin"},
+        timeout=10,
+    )
+    if res.status_code != 200:
+        pytest.fail(f"Admin login failed: {res.status_code} - {res.text}")
+    token = res.json().get("session_token")
+    if not token:
+        pytest.fail("No admin session token returned")
+    return token
+
+
+@pytest.fixture
+def parking_lot_manager_token(register_and_login):
+    """Create a parking lot manager user and return their token"""
+    unique_id = uuid.uuid4().hex[:6]
+    username = f"manager_{unique_id}"
+    password = "secure123"
+    name = "Parking Lot Manager"
+    email = f"manager_{unique_id}@test.local"
+    phone = f"+31{hash(unique_id) % 900000000 + 100000000}"
+    
+    token = register_and_login(username, password, name, email, phone, 1990)
+    
+    # Update user role in database
+    try:
+        from utils import database_utils
+        user = database_utils.get_user_by_username(username)
+        if user:
+            conn = sqlite3.connect(database_utils.get_db_path())
+            cursor = conn.cursor()
+            cursor.execute("UPDATE users SET role = ? WHERE id = ?", ("PARKING_LOT_MANAGER", user["id"]))
+            conn.commit()
+            conn.close()
+    except Exception as e:
+        print(f"[WARN] Could not update user role: {e}")
+    
+    return token

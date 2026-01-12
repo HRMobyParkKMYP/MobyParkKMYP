@@ -51,6 +51,7 @@ def create_test_database(with_admin=True):
     main_cursor.execute("""
         SELECT sql FROM sqlite_master 
         WHERE type='table' AND sql IS NOT NULL
+        AND name != 'sqlite_sequence'
         ORDER BY name
     """)
     schemas = main_cursor.fetchall()
@@ -68,7 +69,16 @@ def create_test_database(with_admin=True):
     print("\nCreating tables in test database:")
     for schema_tuple in schemas:
         schema = schema_tuple[0]
-        print(f"  - {schema.split()[2]}")  # Table name
+        table_name = schema.split()[2]
+        print(f"  - {table_name}")  # Table name
+        
+        # Update users table schema to include PARKING_LOT_MANAGER role
+        if table_name == 'users' and "CHECK (role IN ('USER','ADMIN','MANAGER'))" in schema:
+            schema = schema.replace(
+                "CHECK (role IN ('USER','ADMIN','MANAGER'))",
+                "CHECK (role IN ('USER','ADMIN','MANAGER','PARKING_LOT_MANAGER'))"
+            )
+        
         test_cursor.execute(schema)
     
     test_conn.commit()
