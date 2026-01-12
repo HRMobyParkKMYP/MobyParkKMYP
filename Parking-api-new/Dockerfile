@@ -13,6 +13,6 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && sed -i 's/\r$//' /entrypoint.sh
 
 WORKDIR /app/api
-ENV PYTHONPATH=/app/api
+ENV PYTHONPATH=/app
 
 ENTRYPOINT ["/entrypoint.sh"]
