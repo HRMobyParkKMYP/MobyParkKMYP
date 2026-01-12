@@ -71,7 +71,8 @@ jobs:
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           echo "Creating deployment directory on host..."
-          mkdir -p ${{ env.RUNNER_DEPLOY_DIR }}
+          sudo mkdir -p ${{ env.RUNNER_DEPLOY_DIR }}
+          sudo chown -R $(whoami):$(whoami) ${{ env.RUNNER_DEPLOY_DIR }}
           
           echo "Copying repository to host deployment directory..."
           rsync -av --delete \
