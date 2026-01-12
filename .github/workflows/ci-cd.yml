@@ -20,7 +20,7 @@ env:
 
 jobs:
   test-build-deploy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     environment: mobypark-api
     
     steps:
