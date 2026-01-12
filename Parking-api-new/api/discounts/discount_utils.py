@@ -6,6 +6,23 @@ from typing import Optional, Dict, Any
 from utils.database_utils import execute_query
 
 
+def get_discount_by_id(discount_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Get discount details by ID.
+    
+    Args:
+        discount_id: Discount ID
+    
+    Returns:
+        Discount record or None if not found
+    """
+    results = execute_query(
+        "SELECT * FROM discounts WHERE id = ?",
+        (discount_id,)
+    )
+    return results[0] if results else None
+
+
 def get_discount_by_code(code: str) -> Optional[Dict[str, Any]]:
     """
     Get discount details by code.

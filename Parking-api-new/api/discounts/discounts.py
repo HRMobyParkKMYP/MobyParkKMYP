@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from utils.session_manager import get_session
 from utils.database_utils import execute_query, get_db_connection
 from models.Discount import Discount
+from discounts.discount_utils import get_discount_by_id
 
 router = APIRouter()
 
@@ -260,13 +261,10 @@ async def get_discount(
     """
     user = require_admin_or_parking_lot_manager(authorization)
     
-    query = "SELECT * FROM discounts WHERE id = ?"
-    results = execute_query(query, (discount_id,))
+    discount = get_discount_by_id(discount_id)
     
-    if not results:
+    if not discount:
         raise HTTPException(status_code=404, detail="Discount not found")
-    
-    discount = results[0]
     
     # Check authorization for parking lot managers
     if user.get("role") == "PARKING_LOT_MANAGER":
@@ -293,12 +291,9 @@ async def update_discount(
     user = require_admin_or_parking_lot_manager(authorization)
     
     # Check if discount exists
-    query = "SELECT id, code, description, percent, amount, applies_to, starts_at, ends_at, parking_lot_id FROM discounts WHERE id = ?"
-    results = execute_query(query, (discount_id,))
-    if not results:
+    discount = get_discount_by_id(discount_id)
+    if not discount:
         raise HTTPException(status_code=404, detail="Discount not found")
-    
-    discount = results[0]
     
     # Check authorization for parking lot managers
     if user.get("role") == "PARKING_LOT_MANAGER":
@@ -387,12 +382,9 @@ async def delete_discount(
     user = require_admin_or_parking_lot_manager(authorization)
     
     # Check if discount exists
-    query = "SELECT * FROM discounts WHERE id = ?"
-    results = execute_query(query, (discount_id,))
-    if not results:
+    discount = get_discount_by_id(discount_id)
+    if not discount:
         raise HTTPException(status_code=404, detail="Discount not found")
-    
-    discount = results[0]
     
     # Check authorization for parking lot managers
     if user.get("role") == "PARKING_LOT_MANAGER":
