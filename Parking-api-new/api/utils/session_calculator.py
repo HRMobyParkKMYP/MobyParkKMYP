@@ -7,10 +7,10 @@ import hashlib
 def calculate_price(parkinglot, sid, data):
     """Bereken prijs voor parking sessie - uit session_calculator.py"""
     price = 0
-    start = datetime.strptime(data["started"], "%d-%m-%Y %H:%M:%S")
+    start = datetime.strptime(data["started"], "%Y-%m-%d %H:%M:%S")
 
     if data.get("stopped"):
-        end = datetime.strptime(data["stopped"], "%d-%m-%Y %H:%M:%S")
+        end = datetime.strptime(data["stopped"], "%Y-%m-%d %H:%M:%S")
     else:
         end = datetime.now()
 

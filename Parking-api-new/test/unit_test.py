@@ -44,8 +44,8 @@ class TestCalculatePrice:
         """Test normale prijsberekening - 3 uur parkeren = €7.50"""
         now = datetime.now()
         session_data = {
-            "started": now.strftime("%d-%m-%Y %H:%M:%S"),
-            "stopped": (now + timedelta(hours=3)).strftime("%d-%m-%Y %H:%M:%S"),
+            "started": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "stopped": (now + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S"),
             "licenseplate": "AB-123-CD"
         }
         
@@ -61,8 +61,8 @@ class TestCalculatePrice:
         """Test dat sessies < 3 minuten gratis zijn"""
         now = datetime.now()
         session_data = {
-            "started": now.strftime("%d-%m-%Y %H:%M:%S"),
-            "stopped": (now + timedelta(minutes=2)).strftime("%d-%m-%Y %H:%M:%S"),
+            "started": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "stopped": (now + timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S"),
             "licenseplate": "AB-123-CD"
         }
         
