@@ -19,7 +19,8 @@ env:
 
 jobs:
   test-build-deploy:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
+    environment: mobypark-api
     
     steps:
       - name: Checkout code
@@ -89,11 +90,15 @@ jobs:
       
       - name: Deploy new container
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          FERNET_KEY: ${{ secrets.FERNET_KEY }}
+          API_HOST_IP: ${{ secrets.API_HOST_IP }}
+          API_HOST_PORT: ${{ secrets.API_HOST_PORT }}
         run: |
           cd ${{ env.DEPLOY_DIR }}
           
           docker run -d \
-            --name ${{ env.APP_NAME }} \
+            --name "${{ env.APP_NAME }}" \
             --restart unless-stopped \
             -p ${{ env.HOST_PORT }}:${{ env.CONTAINER_PORT }} \
             -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
@@ -107,24 +112,21 @@ jobs:
           # Check if container is running
           docker ps | grep ${{ env.APP_NAME }}
       
-      - name: Health check
+      - name: Health check (inside container)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          max_attempts=10
-          attempt=0
-          
-          while [ $attempt -lt $max_attempts ]; do
-            if curl -f http://localhost:${{ env.HOST_PORT }}/ 2>/dev/null; then
-              echo "Health check passed!"
+          max_attempts=3
+          for i in $(seq 1 $max_attempts); do
+            if docker exec "${{ env.APP_NAME }}" curl -fsS \
+              "http://localhost:${{ secrets.API_HOST_PORT }}/openapi.json" >/dev/null; then
+              echo "Health check passed"
               exit 0
             fi
-            echo "Attempt $((attempt+1))/$max_attempts failed, retrying..."
-            sleep 3
-            attempt=$((attempt+1))
+            echo "Attempt $i/$max_attempts failed, retrying..."
+            docker logs --tail 50 "${{ env.APP_NAME }}" || true
+            sleep 2
           done
-          
-          echo "Health check failed after $max_attempts attempts"
-          docker logs ${{ env.APP_NAME }}
+          echo "Health check failed"
           exit 1
       
       - name: Clean up old images
