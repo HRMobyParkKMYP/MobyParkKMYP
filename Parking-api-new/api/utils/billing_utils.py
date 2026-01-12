@@ -1,6 +1,6 @@
 from typing import List, Dict, Any
-from utils.database_utils import execute_query
-from utils import session_calculator
+from api.utils.database_utils import execute_query
+from api.utils import session_calculator
 
 
 def get_user_sessions(user_id: int) -> List[Dict[str, Any]]:

@@ -129,12 +129,24 @@ def update_parking_session(session_id: int, data: dict):
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     try:
-        # Only update stopped_at field
-        cursor.execute("""
-            UPDATE p_sessions
-            SET stopped_at=?
-            WHERE id=?
-        """, (data.get("stopped"), session_id))
+        # Build dynamic update query based on provided fields
+        update_fields = []
+        values = []
+        
+        if "stopped" in data:
+            update_fields.append("stopped_at=?")
+            values.append(data["stopped"])
+        
+        if "verified_exit" in data:
+            update_fields.append("verified_exit_at=?")
+            values.append(data["verified_exit"])
+        
+        if not update_fields:
+            return  # Nothing to update
+        
+        values.append(session_id)
+        query = f"UPDATE p_sessions SET {', '.join(update_fields)} WHERE id=?"
+        cursor.execute(query, values)
         conn.commit()
     finally:
         conn.close()
@@ -150,12 +162,12 @@ def delete_parking_session(session_id: int):
         conn.close()
 
 def count_active_sessions(lot_id: int) -> int:
-    """Count active sessions (not yet stopped) in parking lot"""
+    """Count active sessions (not yet stopped and not yet verified exit) in parking lot"""
     conn = sqlite3.connect(DATABASE_PATH)
     cursor = conn.cursor()
     try:
         cursor.execute(
-            "SELECT COUNT(*) FROM p_sessions WHERE parking_lot_id = ? AND stopped_at IS NULL",
+            "SELECT COUNT(*) FROM p_sessions WHERE parking_lot_id = ? AND (stopped_at IS NULL OR verified_exit_at IS NULL)",
             (lot_id,)
         )
         count = cursor.fetchone()[0]
@@ -180,5 +192,47 @@ def get_upcoming_reservations(lot_id: int, minutes: int = 15) -> List[Dict]:
         """, (lot_id, minutes))
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
+    finally:
+        conn.close()
+
+def get_session_in_grace_period(lot_id: int, licenseplate: str):
+    """
+    Get session that is in grace period (stopped but not verified within 15 minutes)
+    """
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        # Get session that's stopped but not verified
+        cursor.execute("""
+            SELECT * FROM p_sessions 
+            WHERE parking_lot_id = ? 
+            AND license_plate = ? 
+            AND stopped_at IS NOT NULL 
+            AND verified_exit_at IS NULL
+            AND datetime(stopped_at, '+15 minutes') >= datetime('now', 'localtime')
+        """, (lot_id, licenseplate))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+def check_and_resume_expired_sessions():
+    """
+    Automatically resume sessions where stopped_at was more than 15 minutes ago
+    and verified_exit_at is still NULL. Returns count of resumed sessions.
+    """
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE p_sessions 
+            SET stopped_at = NULL 
+            WHERE stopped_at IS NOT NULL 
+            AND verified_exit_at IS NULL
+            AND datetime(stopped_at, '+15 minutes') < datetime('now', 'localtime')
+        """)
+        conn.commit()
+        return cursor.rowcount
     finally:
         conn.close()

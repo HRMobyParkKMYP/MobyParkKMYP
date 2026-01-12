@@ -2,6 +2,9 @@ import os
 import pytest
 import requests
 import uuid
+import sqlite3
+from datetime import datetime, timedelta
+import time
 
 BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
@@ -19,6 +22,77 @@ def get_admin_token():
         f"Could not login as admin. Make sure to run 'python test/create_test_db.py' first "
         f"to create the test database with admin user."
     )
+
+def get_test_db_path():
+    """Get test database path"""
+    test_dir = os.path.dirname(os.path.abspath(__file__))
+    api_dir = os.path.join(test_dir, '..', 'api')
+    return os.path.join(api_dir, 'data', 'parking_test.sqlite3')
+
+
+def manually_expire_grace_period(session_id):
+    """Manually set stopped_at to >15 minutes ago to simulate expired grace period"""
+    db_path = get_test_db_path()
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Set stopped_at to 20 minutes ago
+    expired_time = (datetime.now() - timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute(
+        "UPDATE p_sessions SET stopped_at = ? WHERE id = ?",
+        (expired_time, session_id)
+    )
+    conn.commit()
+    conn.close()
+    
+    # Sleep 1 second to ensure new timestamps are different
+    time.sleep(1)
+    
+    return expired_time  # Return the expired time for test assertions
+
+
+def manually_set_stopped_at_expired(session_id):
+    """Manually set stopped_at to >15 minutes ago while preserving verified_exit_at"""
+    db_path = get_test_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # Get the session's started_at time
+    cursor.execute("SELECT started_at FROM p_sessions WHERE id = ?", (session_id,))
+    row = cursor.fetchone()
+    
+    if row:
+        # Set stopped_at to 1 hour after started_at (so it's logically after start, but old enough to be "expired")
+        started_dt = datetime.strptime(row["started_at"], "%Y-%m-%d %H:%M:%S")
+        expired_time = (started_dt + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        # Fallback
+        expired_time = (datetime.now() - timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
+    
+    cursor.execute(
+        "UPDATE p_sessions SET stopped_at = ? WHERE id = ?",
+        (expired_time, session_id)
+    )
+    conn.commit()
+    conn.close()
+    
+    return expired_time
+
+
+def get_session_from_db(session_id):
+    """Get session data directly from database"""
+    db_path = get_test_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM p_sessions WHERE id = ?", (session_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    return dict(row) if row else None
+
 
 # POST /parking-lots tests
 def test_create_parking_lot_success():
@@ -708,3 +782,346 @@ def test_start_session_blocked_by_upcoming_reservation(register_and_login):
     response_text = session_res.content.lower()
     assert b"full" in response_text or b"reservation" in response_text, \
         f"Expected message about being full or reservation, got: {session_res.text}"
+
+# FRAUD PREVENTION TESTS
+# Tests for verified_exit_at column and 15-minute grace period functionality
+
+def test_fraud_normal_exit_within_grace_period():
+    """
+    Fraud Prevention Test 1: Normal user behavior - exits within 15 minutes
+    User should be able to start a new session after verified exit
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Normal Exit Test Lot",
+        "address": "123 Normal St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "NORMAL123"
+    
+    # Start session
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    assert start_res.status_code == 200
+    session_id = start_res.json()["session"]["id"]
+    
+    # Stop session
+    stop_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    assert stop_res.status_code == 200
+    assert "15 minutes" in stop_res.json()["message"]
+    
+    # Verify stopped_at is set
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] is not None
+    assert db_session["verified_exit_at"] is None
+    
+    # Exit through barrier
+    barrier_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/verify-exit",
+        json={"licenseplate": license_plate})
+    assert barrier_res.status_code == 200
+    assert barrier_res.json()["verified"] is True
+    
+    # Verify verified_exit_at is set
+    db_session = get_session_from_db(session_id)
+    assert db_session["verified_exit_at"] is not None
+    
+    # Should be able to start new session
+    new_session_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    assert new_session_res.status_code == 200, f"Should allow new session after verified exit: {new_session_res.text}"
+
+
+def test_fraud_attempt_grace_period_expired():
+    """
+    Fraud Prevention Test 2: Fraud attempt - stays parked after stopping session
+    Session should be auto-resumed after grace period expires
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Fraud Test Lot",
+        "address": "123 Fraud St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "FRAUD01"
+    
+    # Start and stop session
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    session_id = start_res.json()["session"]["id"]
+    
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    
+    # Manually expire grace period
+    manually_expire_grace_period(session_id)
+    
+    # Verify session is stopped but not verified
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] is not None
+    assert db_session["verified_exit_at"] is None
+    
+    # Try to start new session - should trigger check_and_resume
+    new_session_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    
+    # Should fail because session was resumed
+    assert new_session_res.status_code == 409
+    assert "already active" in new_session_res.json()["detail"]
+    
+    # Verify session was resumed (stopped_at cleared)
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] is None, "Session should be resumed (stopped_at = NULL)"
+
+
+def test_fraud_barrier_exit_after_grace_expired():
+    """
+    Fraud Prevention Test 3: User exits through barrier after grace period expired
+    Barrier should auto-stop the resumed session at current time
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Late Exit Test Lot",
+        "address": "123 Late St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "LATE123"
+    
+    # Start and stop session
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    session_id = start_res.json()["session"]["id"]
+    
+    stop_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    original_stop_time = stop_res.json()["session"]["stopped"]
+    
+    # Manually expire grace period (returns the expired time we set)
+    expired_time = manually_expire_grace_period(session_id)
+    
+    # Exit through barrier
+    barrier_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/verify-exit",
+        json={"licenseplate": license_plate})
+    assert barrier_res.status_code == 200
+    
+    # Verify session was stopped at barrier time (not the expired time we set)
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] is not None
+    assert db_session["verified_exit_at"] is not None
+    assert db_session["stopped_at"] != expired_time, "stopped_at should be updated to barrier exit time (not the expired time)"
+
+
+def test_fraud_cannot_start_during_grace_period():
+    """
+    Fraud Prevention Test 4: User tries to start new session while in grace period
+    Should be blocked with error message
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Grace Period Test Lot",
+        "address": "123 Grace St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "GRACE01"
+    
+    # Start and stop session
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    
+    # Try to start new session immediately
+    new_session_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    
+    assert new_session_res.status_code == 409
+    detail = new_session_res.json()["detail"]
+    assert "grace period" in detail or "waiting for exit" in detail
+
+
+def test_fraud_never_stops_just_exits():
+    """
+    Fraud Prevention Test 5: User never stops manually, just drives to barrier
+    Barrier should auto-stop and verify in one action
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "No Stop Test Lot",
+        "address": "123 NoStop St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "NOSTOP1"
+    
+    # Start session but don't stop
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    session_id = start_res.json()["session"]["id"]
+    
+    # Drive directly to barrier
+    barrier_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/verify-exit",
+        json={"licenseplate": license_plate})
+    assert barrier_res.status_code == 200
+    assert "auto-stopped" in barrier_res.json()["message"]
+    
+    # Verify both stopped_at and verified_exit_at are set
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] is not None
+    assert db_session["verified_exit_at"] is not None
+    assert db_session["stopped_at"] == db_session["verified_exit_at"]
+
+
+def test_fraud_stop_again_after_grace_expired():
+    """
+    Fraud Prevention Test 6: User presses stop again after grace period expired
+    Should resume session first, then stop with new time
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Double Stop Test Lot",
+        "address": "123 DoubleStop St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "STOP2X"
+    
+    # Start and stop session
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    session_id = start_res.json()["session"]["id"]
+    
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    
+    # Manually expire grace period (returns the expired time we set)
+    expired_time = manually_expire_grace_period(session_id)
+    
+    # Press stop again
+    second_stop = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    assert second_stop.status_code == 200
+    
+    # Verify stopped_at was updated to new time (not the expired time we set)
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] != expired_time, "stopped_at should be updated on second stop (not the expired time)"
+    assert db_session["verified_exit_at"] is None
+
+
+def test_fraud_verified_exit_prevents_resume():
+    """
+    Fraud Prevention Test 7: Verified exit should prevent session from being resumed
+    Even after >15 minutes, if verified_exit_at is set, session stays stopped
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Verified Prevents Resume Lot",
+        "address": "123 Verified St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "VERIFY1"
+    
+    # Start, stop, and verify exit
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    session_id = start_res.json()["session"]["id"]
+    
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/verify-exit",
+        json={"licenseplate": license_plate})
+    
+    # Manually set stopped_at to >15 minutes ago (but keep verified_exit_at)
+    manually_set_stopped_at_expired(session_id)
+    
+    # Try to start new session - should succeed because verified_exit_at is set
+    new_session_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    
+    assert new_session_res.status_code == 200, "Should allow new session when verified_exit_at is set"
+    
+    # Verify old session was NOT resumed
+    old_session = get_session_from_db(session_id)
+    assert old_session["stopped_at"] is not None, "Verified session should NOT be resumed"
+    assert old_session["verified_exit_at"] is not None
+
+
+def test_fraud_no_session_barrier_exit():
+    """
+    Fraud Prevention Test 8: Barrier detects exit for non-existent session
+    Should return 404 error
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "No Session Test Lot",
+        "address": "123 NoSession St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "NOSESS1"
+    
+    # Try to verify exit without starting session
+    barrier_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/verify-exit",
+        json={"licenseplate": license_plate})
+    assert barrier_res.status_code == 404
+    assert "No active or pending session" in barrier_res.json()["detail"]

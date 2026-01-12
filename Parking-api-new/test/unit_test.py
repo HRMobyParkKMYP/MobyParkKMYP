@@ -42,10 +42,11 @@ class TestCalculatePrice:
     
     def test_calculate_price_correct(self, sample_parkinglot):
         """Test normale prijsberekening - 3 uur parkeren = €7.50"""
-        now = datetime.now()
+        # Use fixed time (14:00) to ensure it doesn't cross midnight
+        base_time = datetime(2025, 1, 15, 14, 0, 0)
         session_data = {
-            "started": now.strftime("%d-%m-%Y %H:%M:%S"),
-            "stopped": (now + timedelta(hours=3)).strftime("%d-%m-%Y %H:%M:%S"),
+            "started": base_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "stopped": (base_time + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M:%S"),
             "licenseplate": "AB-123-CD"
         }
         
@@ -59,10 +60,10 @@ class TestCalculatePrice:
     
     def test_calculate_price_short_session_free(self, sample_parkinglot):
         """Test dat sessies < 3 minuten gratis zijn"""
-        now = datetime.now()
+        base_time = datetime(2025, 1, 15, 14, 0, 0)
         session_data = {
-            "started": now.strftime("%d-%m-%Y %H:%M:%S"),
-            "stopped": (now + timedelta(minutes=2)).strftime("%d-%m-%Y %H:%M:%S"),
+            "started": base_time.strftime("%Y-%m-%d %H:%M:%S"),
+            "stopped": (base_time + timedelta(minutes=2)).strftime("%Y-%m-%d %H:%M:%S"),
             "licenseplate": "AB-123-CD"
         }
         
