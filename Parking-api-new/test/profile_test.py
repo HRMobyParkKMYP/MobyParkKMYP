@@ -6,7 +6,7 @@ from datetime import datetime
 import time
 import uuid
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
 def get_test_db_path():
     """Test database path"""

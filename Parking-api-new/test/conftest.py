@@ -1,16 +1,67 @@
-import pytest
-import requests
 import os
+import socket
 import sqlite3
 import uuid
+import sys
+import threading
+import time
 
-BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+import pytest
+import requests
+import uvicorn
+
+
+def _reserve_port() -> int:
+    """Pick a free localhost port for the test server."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+# Configure test env before tests are collected so module-level BASE_URL in tests is correct
+TEST_API_PORT = int(os.environ.get("TEST_API_PORT", _reserve_port()))
+os.environ.setdefault("TEST_MODE", "true")
+os.environ.setdefault("API_BASE_URL", f"http://127.0.0.1:{TEST_API_PORT}")
+
+BASE_URL = os.environ["API_BASE_URL"]
 
 def get_test_db_path():
     """Get test database path"""
     test_dir = os.path.dirname(os.path.abspath(__file__))
     api_dir = os.path.join(test_dir, '..', 'api')
     return os.path.join(api_dir, 'data', 'parking_test.sqlite3')
+
+
+def _start_test_api_server(api_dir: str):
+    """Start uvicorn in a background thread for integration tests."""
+    # Ensure api directory on sys.path for imports
+    if api_dir not in sys.path:
+        sys.path.insert(0, api_dir)
+
+    from apiroutes import run as create_app
+
+    config = uvicorn.Config(
+        create_app(),
+        host="127.0.0.1",
+        port=TEST_API_PORT,
+        log_level="warning",
+    )
+    server = uvicorn.Server(config)
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    # Wait for server to respond
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        try:
+            resp = requests.get(f"{BASE_URL}/health", timeout=1)
+            if resp.status_code == 200:
+                return server, thread
+        except Exception:
+            pass
+        time.sleep(0.2)
+
+    raise RuntimeError("Test API server failed to start on 127.0.0.1:{TEST_API_PORT}")
 
 
 @pytest.fixture
@@ -108,8 +159,19 @@ def setup_test_environment():
     db_dir = os.path.dirname(db_path)
     if not os.path.exists(db_dir):
         os.makedirs(db_dir)
+
+    # Start dedicated test API server using the test database
+    api_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'api'))
+    server, thread = _start_test_api_server(api_dir)
     
     yield
+    
+    # Signal server shutdown
+    try:
+        server.should_exit = True
+        thread.join(timeout=5)
+    except Exception:
+        pass
     
     # Cleanup after all tests
     if os.path.exists(db_path):

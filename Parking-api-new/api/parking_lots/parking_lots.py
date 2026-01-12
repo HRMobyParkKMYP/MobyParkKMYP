@@ -135,12 +135,11 @@ async def delete_parking_lot(lot_id: int, authorization: Optional[str] = Header(
 # POST start parking session
 @router.post("/parking-lots/{lot_id}/sessions/start")
 async def start_session(lot_id: int, data: SessionStartRequest, authorization: Optional[str] = Header(None)):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Unauthorized: missing token")
-    
-    session_user = get_session(authorization)
-    if not session_user:
-        raise HTTPException(status_code=401, detail="Unauthorized: invalid session")
+    username = None
+    if authorization:
+        session_user = get_session(authorization)
+        if session_user:
+            username = session_user["username"]
     
     licenseplate = data.licenseplate.strip()
     if not licenseplate:
@@ -156,13 +155,35 @@ async def start_session(lot_id: int, data: SessionStartRequest, authorization: O
     if active_session:
         raise HTTPException(status_code=409, detail="Cannot start session: another session for this licenseplate is already active")
     
+    # Check capacity: current sessions + upcoming reservations
+    capacity = lot_data.get("capacity", 0)
+    active_sessions_count = db.count_active_sessions(lot_id)
+    upcoming_reservations = db.get_upcoming_reservations(lot_id, minutes=15)
+    upcoming_reservations_count = len(upcoming_reservations)
+    
+    # Calculate available spots
+    occupied_spots = active_sessions_count + upcoming_reservations_count
+    available_spots = capacity - occupied_spots
+    
+    if available_spots <= 0:
+        if upcoming_reservations_count > 0:
+            raise HTTPException(
+                status_code=409, 
+                detail=f"Parking lot is full. {active_sessions_count}/{capacity} spots occupied and {upcoming_reservations_count} reservation(s) starting soon."
+            )
+        else:
+            raise HTTPException(
+                status_code=409, 
+                detail=f"Parking lot is full. {active_sessions_count}/{capacity} spots occupied."
+            )
+    
     # Create new session
     new_session = {
         "lot_id": lot_id,
         "licenseplate": licenseplate,
         "started": datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
         "stopped": None,
-        "user": session_user["username"]
+        "user": username
     }
     
     session_id = db.create_parking_session(new_session)
@@ -173,12 +194,8 @@ async def start_session(lot_id: int, data: SessionStartRequest, authorization: O
 # POST stop parking session
 @router.post("/parking-lots/{lot_id}/sessions/stop")
 async def stop_session(lot_id: int, data: SessionStopRequest, authorization: Optional[str] = Header(None)):
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Unauthorized: missing token")
-    
-    session_user = get_session(authorization)
-    if not session_user:
-        raise HTTPException(status_code=401, detail="Unauthorized: invalid session")
+    # Optional authentication - allow anonymous parking
+    # (authorization not needed to stop a session, only license plate matters)
     
     licenseplate = data.licenseplate.strip()
     if not licenseplate:

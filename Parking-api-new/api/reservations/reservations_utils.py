@@ -102,3 +102,30 @@ def decrement_reserved_count(lot_id: int):
         conn.commit()
     finally:
         conn.close()
+
+def get_overlapping_reservations(lot_id: int, start_time: str, end_time: str, exclude_reservation_id: int = None) -> int:
+    """Count reservations that overlap with the given time range"""
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+    try:
+        # Count reservations that overlap with the requested time period
+        # Two time ranges overlap if: start1 < end2 AND start2 < end1
+        query = """
+            SELECT COUNT(*) FROM reservations 
+            WHERE parking_lot_id = ? 
+            AND status IN ('pending', 'confirmed')
+            AND datetime(start_time) < datetime(?)
+            AND datetime(end_time) > datetime(?)
+        """
+        params = [lot_id, end_time, start_time]
+        
+        # Exclude a specific reservation (for updates)
+        if exclude_reservation_id is not None:
+            query += " AND id != ?"
+            params.append(exclude_reservation_id)
+        
+        cursor.execute(query, params)
+        count = cursor.fetchone()[0]
+        return count
+    finally:
+        conn.close()
