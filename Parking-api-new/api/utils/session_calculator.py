@@ -1,5 +1,5 @@
 from datetime import datetime
-from utils.database_utils import execute_query
+from api.utils.database_utils import execute_query
 import math
 import uuid
 import hashlib
@@ -20,12 +20,12 @@ def calculate_price(parkinglot, sid, data):
     if diff.total_seconds() < 180:
         price = 0
     elif end.date() > start.date():
-        price = float(parkinglot.get("daytariff", 999)) * (diff.days + 1)
+        price = float(parkinglot.get("day_tariff", 999)) * (diff.days + 1)
     else:
         price = float(parkinglot.get("tariff")) * hours
 
-        if price > float(parkinglot.get("daytariff", 999)):
-            price = float(parkinglot.get("daytariff", 999))
+        if price > float(parkinglot.get("day_tariff", 999)):
+            price = float(parkinglot.get("day_tariff", 999))
 
     return (price, hours, diff.days + 1 if end.date() > start.date() else 0)
 

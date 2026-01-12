@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 from datetime import datetime
-from utils.database_utils import get_db_connection, execute_query
+from api.utils.database_utils import get_db_connection, execute_query
 
 
 def get_vehicles_by_user_id(user_id: int) -> List[Dict[str, Any]]:

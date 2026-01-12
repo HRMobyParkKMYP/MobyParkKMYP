@@ -5,10 +5,11 @@ import pytest
 import requests
 import uuid
 import sqlite3
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
 
 @pytest.fixture

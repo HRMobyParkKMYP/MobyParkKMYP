@@ -1,7 +1,7 @@
 """
 Discount utilities for validating and applying discount codes
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 from utils.database_utils import execute_query
 
@@ -50,7 +50,7 @@ def is_discount_valid(discount: Dict[str, Any]) -> bool:
     Returns:
         True if discount is active, False otherwise
     """
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     
     # Check start date
     if discount.get("starts_at") and discount["starts_at"] > now:
