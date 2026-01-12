@@ -34,6 +34,9 @@ class SessionStartRequest(BaseModel):
 class SessionStopRequest(BaseModel):
     licenseplate: str
 
+class BarrierVerificationRequest(BaseModel):
+    licenseplate: str
+
 # GET all parking lots
 @router.get("/parking-lots")
 async def get_all_parking_lots():
@@ -72,7 +75,7 @@ async def create_parking_lot(data: ParkingLotCreateRequest, authorization: Optio
         reserved=0,
         tariff=data.tariff,
         day_tariff=data.day_tariff,
-        created_at=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+        created_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         lat=data.lat,
         lng=data.lng
     )
@@ -102,7 +105,7 @@ async def update_parking_lot(lot_id: int, data: ParkingLotUpdateRequest, authori
     existing_lot = ParkingLot.from_dict(existing_lot_data)
     
     # Update only provided fields
-    update_fields = data.dict(exclude_unset=True)
+    update_fields = data.model_dump(exclude_unset=True)
     for field, value in update_fields.items():
         if value is not None:
             setattr(existing_lot, field, value)
@@ -150,10 +153,21 @@ async def start_session(lot_id: int, data: SessionStartRequest, authorization: O
     if not lot_data:
         raise HTTPException(status_code=404, detail="Parking lot not found")
     
+    # Resume any expired grace period sessions (stopped >15 mins ago without barrier exit)
+    db.check_and_resume_expired_sessions()
+    
     # Check if there's already an active session for this plate
     active_session = db.get_active_session_by_licenseplate(lot_id, licenseplate)
     if active_session:
         raise HTTPException(status_code=409, detail="Cannot start session: another session for this licenseplate is already active")
+    
+    # Check if there's a session in grace period for this plate
+    grace_period_session = db.get_session_in_grace_period(lot_id, licenseplate)
+    if grace_period_session:
+        raise HTTPException(
+            status_code=409, 
+            detail="Cannot start new session: you have a session waiting for exit confirmation. Please exit through the barrier within 15 minutes or the session will resume automatically."
+        )
     
     # Check capacity: current sessions + upcoming reservations
     capacity = lot_data.get("capacity", 0)
@@ -181,7 +195,7 @@ async def start_session(lot_id: int, data: SessionStartRequest, authorization: O
     new_session = {
         "lot_id": lot_id,
         "licenseplate": licenseplate,
-        "started": datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+        "started": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "stopped": None,
         "user": username
     }
@@ -206,17 +220,76 @@ async def stop_session(lot_id: int, data: SessionStopRequest, authorization: Opt
     if not lot_data:
         raise HTTPException(status_code=404, detail="Parking lot not found")
     
+    # Resume any expired grace period sessions first
+    db.check_and_resume_expired_sessions()
+    
     # Find active session for this plate
     active_session = db.get_active_session_by_licenseplate(lot_id, licenseplate)
     if not active_session:
         raise HTTPException(status_code=404, detail="Cannot stop session: no active session for this licenseplate")
     
-    # Stop the session
-    db.update_parking_session(active_session["id"], {"stopped": datetime.now().strftime("%d-%m-%Y %H:%M:%S")})
-    active_session["stopped"] = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
+    # Stop the session - user now has 15 minutes to exit through barrier
+    stopped_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.update_parking_session(active_session["id"], {"stopped": stopped_time})
+    active_session["stopped"] = stopped_time
     
-    return {"message": f"Session stopped for: {licenseplate}", "session": active_session}
+    return {
+        "message": f"Session stopped for: {licenseplate}. You have 15 minutes to exit through the barrier.",
+        "session": active_session,
+        "grace_period_minutes": 15
+    }
 
+# POST barrier verification endpoint (called by barrier when vehicle exits)
+@router.post("/parking-lots/{lot_id}/sessions/verify-exit")
+async def verify_barrier_exit(lot_id: int, data: BarrierVerificationRequest, authorization: Optional[str] = Header(None)):
+    """
+    Called by the barrier system when a vehicle exits.
+    Sets verified_exit_at to confirm the vehicle left within the grace period.
+    """
+    licenseplate = data.licenseplate.strip()
+    if not licenseplate:
+        raise HTTPException(status_code=400, detail="Required field missing: licenseplate")
+    
+    # Check parking lot exists
+    lot_data = db.get_parking_lot_by_id(lot_id)
+    if not lot_data:
+        raise HTTPException(status_code=404, detail="Parking lot not found")
+    
+    # Resume any expired grace period sessions first
+    db.check_and_resume_expired_sessions()
+    
+    # Find session in grace period for this license plate
+    grace_period_session = db.get_session_in_grace_period(lot_id, licenseplate)
+    
+    if not grace_period_session:
+        # No session in grace period - might be an active session that wasn't stopped yet
+        active_session = db.get_active_session_by_licenseplate(lot_id, licenseplate)
+        if active_session:
+            # Auto-stop and verify at the same time
+            verified_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            db.update_parking_session(active_session["id"], {
+                "stopped": verified_time,
+                "verified_exit": verified_time
+            })
+            return {
+                "message": f"Session auto-stopped and verified for: {licenseplate}",
+                "session_id": active_session["id"],
+                "verified": True
+            }
+        else:
+            raise HTTPException(status_code=404, detail="No active or pending session found for this license plate")
+    
+    # Verify the exit within grace period
+    verified_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.update_parking_session(grace_period_session["id"], {"verified_exit": verified_time})
+    
+    return {
+        "message": f"Exit verified for: {licenseplate}",
+        "session_id": grace_period_session["id"],
+        "verified": True,
+        "verified_at": verified_time
+    }
+ 
 # GET all sessions for a parking lot
 @router.get("/parking-lots/{lot_id}/sessions")
 async def get_all_sessions(lot_id: int, authorization: Optional[str] = Header(None)):

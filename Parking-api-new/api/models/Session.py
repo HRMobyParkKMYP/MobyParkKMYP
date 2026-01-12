@@ -9,7 +9,7 @@ class PSession(ModelInterface):
     def __init__(self, sid: int, parking_lot_id: int, user_id: int = None,
                  vehicle_id: int = None, license_plate: str = None, user_name: str = None,
                  started_at: str = None, stopped_at: str = None, duration_minutes: int = None,
-                 cost: float = None, payment_status: str = 'unpaid'):
+                 cost: float = None, payment_status: str = 'unpaid', verified_exit_at: str = None):
         self.id = int(sid) if sid is not None and sid != '' else None
         self.parking_lot_id = int(parking_lot_id) if parking_lot_id is not None else None
         self.user_id = int(user_id) if user_id is not None else None
@@ -21,6 +21,7 @@ class PSession(ModelInterface):
         self.duration_minutes = int(duration_minutes) if duration_minutes is not None else None
         self.cost = float(cost) if cost is not None else None
         self.payment_status = payment_status
+        self.verified_exit_at = verified_exit_at
 
     @classmethod
     def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
@@ -36,6 +37,7 @@ class PSession(ModelInterface):
             duration_minutes=data.get('duration_minutes'),
             cost=data.get('cost'),
             payment_status=data.get('payment_status', 'unpaid'),
+            verified_exit_at=data.get('verified_exit_at'),
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -51,4 +53,5 @@ class PSession(ModelInterface):
             'duration_minutes': self.duration_minutes,
             'cost': self.cost,
             'payment_status': self.payment_status,
+            'verified_exit_at': self.verified_exit_at,
         }
