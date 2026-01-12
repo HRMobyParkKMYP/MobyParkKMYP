@@ -98,6 +98,7 @@ jobs:
             -p ${{ env.HOST_PORT }}:${{ env.CONTAINER_PORT }} \
             -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
             -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+            -e FERNET_KEY="${{ secrets.FERNET_KEY }}" \
             -v ${{ env.DEPLOY_DIR }}/${{ env.WORKING_DIR }}/parking.sqlite3:/app/parking.sqlite3 \
             ${{ env.DOCKER_IMAGE }}:latest
           
