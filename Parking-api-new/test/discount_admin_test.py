@@ -3,7 +3,7 @@ import requests
 import uuid
 import sys
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Add API directory to path
@@ -126,8 +126,8 @@ class TestDiscountCreation:
     def test_admin_can_create_discount_with_date_range(self, admin_token):
         """Admin should be able to create a discount with specific date range"""
         unique_code = f"SEASONAL_{uuid.uuid4().hex[:4]}"
-        start = (datetime.utcnow() + timedelta(days=1)).isoformat()
-        end = (datetime.utcnow() + timedelta(days=15)).isoformat()
+        start = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        end = (datetime.now(timezone.utc) + timedelta(days=15)).isoformat()
         
         res = requests.post(
             f"{BASE_URL}/discounts",
@@ -225,7 +225,7 @@ class TestDiscountCreation:
         discount_id = create_res.json()["discount"]["id"]
         
         # Update the discount
-        new_end = (datetime.utcnow() + timedelta(days=60)).isoformat()
+        new_end = (datetime.now(timezone.utc) + timedelta(days=60)).isoformat()
         res = requests.put(
             f"{BASE_URL}/discounts/{discount_id}",
             headers={"Authorization": admin_token},

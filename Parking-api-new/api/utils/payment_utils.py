@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
-from datetime import datetime
-from utils.database_utils import get_db_connection, execute_query
+from datetime import datetime, timezone
+from api.utils.database_utils import get_db_connection, execute_query
 import uuid
 
 def generate_external_ref() -> str:
@@ -8,7 +8,7 @@ def generate_external_ref() -> str:
 
 def create_payment_db(user_id: int, reservation_id: Optional[int], amount: float, currency: str, method: str, p_session_id: Optional[str] = None, discount_id: Optional[int] = None) -> Dict[str, Any]:
     """DB logic for creating a payment"""
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now(timezone.utc).isoformat()
     external_ref = generate_external_ref()
 
     query = """

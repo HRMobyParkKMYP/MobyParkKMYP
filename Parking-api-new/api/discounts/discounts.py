@@ -1,11 +1,11 @@
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from utils.session_manager import get_session
 from utils.database_utils import execute_query, get_db_connection
 from models.Discount import Discount
-from discounts.discount_utils import get_discount_by_id
+from .discount_utils import get_discount_by_id
 
 router = APIRouter()
 
@@ -48,12 +48,23 @@ def require_admin(authorization: Optional[str]) -> dict:
 
 
 def require_admin_or_parking_lot_manager(authorization: Optional[str]) -> dict:
-    """Require either ADMIN or PARKING_LOT_MANAGER role"""
     if not authorization:
         raise HTTPException(status_code=401, detail="Unauthorized: missing token")
     
     session_user = get_session(authorization)
     if not session_user:
+        raise HTTPException(status_code=401, detail="Unauthorized: invalid session")
+    """Require either ADMIN or PARKING_LOT_MANAGER role"""
+    if not authorization:
+        raise HTTPException(status_code=401, detail="Unauthorized: missing token")
+    
+    session_user = get_session(authorization)
+    
+    if not session_user:
+        # Session not found - try to extract user info from database by token reference
+        # This is a workaround for test fixtures that update user roles after login
+        # Token should be in the format that the database can recognize
+        # For now, we'll just fail, but in production this could be improved
         raise HTTPException(status_code=401, detail="Unauthorized: invalid session")
     
     # Get current role from database (in case it was updated)
@@ -160,12 +171,12 @@ async def create_discount(
     # Set default date ranges if not provided
     starts_at = request.starts_at
     if not starts_at:
-        starts_at = datetime.utcnow().isoformat()
+        starts_at = datetime.now(timezone.utc).isoformat()
     
     ends_at = request.ends_at
     if not ends_at:
         # Default to 30 days from now
-        ends_at = (datetime.utcnow() + timedelta(days=30)).isoformat()
+        ends_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
     
     # Insert into database
     query = """
@@ -348,6 +359,7 @@ async def update_discount(
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(update_query, tuple(params))
+            conn.commit()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
     

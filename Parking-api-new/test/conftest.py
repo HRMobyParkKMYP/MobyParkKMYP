@@ -217,9 +217,10 @@ def parking_lot_manager_token(register_and_login):
     
     token = register_and_login(username, password, name, email, phone, 1990)
     
-    # Update user role in database
+    # Update user role in database AND session
     try:
         from utils import database_utils
+        from utils.session_manager import update_session
         user = database_utils.get_user_by_username(username)
         if user:
             conn = sqlite3.connect(database_utils.get_db_path())
@@ -227,6 +228,8 @@ def parking_lot_manager_token(register_and_login):
             cursor.execute("UPDATE users SET role = ? WHERE id = ?", ("PARKING_LOT_MANAGER", user["id"]))
             conn.commit()
             conn.close()
+            # Also update the session
+            update_session(token, {"role": "PARKING_LOT_MANAGER"})
     except Exception as e:
         print(f"[WARN] Could not update user role: {e}")
     
