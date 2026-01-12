@@ -104,6 +104,8 @@ jobs:
             -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
             -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
             -e FERNET_KEY="${{ secrets.FERNET_KEY }}" \
+            -e API_HOST_IP="${{ secrets.API_HOST_IP }}" \
+            -e API_HOST_PORT="${{ secrets.API_HOST_PORT }}" \
             -v ${{ env.DEPLOY_DIR }}/${{ env.WORKING_DIR }}/parking.sqlite3:/app/parking.sqlite3 \
             ${{ env.DOCKER_IMAGE }}:latest
           
