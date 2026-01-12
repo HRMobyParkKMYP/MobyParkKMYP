@@ -138,7 +138,7 @@ jobs:
       - name: Show deployment info
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
-          echo "✅ Deployment successful!"
+          echo "Deployment successful!"
           echo "Container: ${{ env.APP_NAME }}"
           echo "Port: ${{ env.HOST_PORT }}"
           docker ps --filter "name=${{ env.APP_NAME }}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
