@@ -1,9 +1,18 @@
 from fastapi import FastAPI, HTTPException
 from customlogger import Logger
 import constants
+import os
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 from account import account
+from profiles import profile
+from vehicle import vehicle
+from paymentsv2 import payments
+from parking_lots import parking_lots
+from utils.database_utils import get_db_path
+from billing import billing
+from reservations import reservations
+from discounts import discounts
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
@@ -41,6 +50,13 @@ class Apiroutes:
     def SetupEndpoints(self) -> None:
         """Include all endpoint routers"""
         self.App.include_router(account.router, tags=["Account"])
+        self.App.include_router(profile.router, tags=["Profile"])        
+        self.App.include_router(vehicle.router, tags=["Vehicle"])
+        self.App.include_router(payments.router, tags=["Payment"])
+        self.App.include_router(billing.router, tags=["Billing"])
+        self.App.include_router(parking_lots.router, tags=["Parking Lots"])
+        self.App.include_router(reservations.router, tags=["Reservations"])
+        self.App.include_router(discounts.router, tags=["Discounts"])
         
     def SetupRoutes(self) -> None:
 
@@ -51,6 +67,15 @@ class Apiroutes:
         @self.App.get("/health")
         async def health_check():
             return {"status": "healthy"}
+        
+        @self.App.get("/debug/db-info")
+        async def db_info():
+            """Debug endpoint to verify which database is being used"""
+            return {
+                "test_mode": os.environ.get('TEST_MODE', 'false'),
+                "database_path": get_db_path(),
+                "database_name": os.path.basename(get_db_path())
+            }
         # User
 
         @self.App.get("/profile", response_model=ApiResponse)
@@ -61,133 +86,14 @@ class Apiroutes:
         async def update_profile():
             return self.tempDefaultResponse()
 
-        # Parking Lot
-
-        @self.App.post("/parking-lots", response_model=ApiResponse)
-        async def create_parking_lot():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots", response_model=ApiResponse)
-        async def get_parking_lots():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots/{id}", response_model=ApiResponse)
-        async def get_parking_lot(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.put("/parking-lots/{id}", response_model=ApiResponse)
-        async def update_parking_lot(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.delete("/parking-lots/{id}", response_model=ApiResponse)
-        async def delete_parking_lot(id: str):
-            return self.tempDefaultResponse()
-
-        # Parking Lot Handling
-
-        @self.App.post("/parking-lots/{id}/sessions/start", response_model=ApiResponse)
-        async def start_parking_session(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.post("/parking-lots/{id}/sessions/stop", response_model=ApiResponse)
-        async def stop_parking_session(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots/{id}/sessions", response_model=ApiResponse)
-        async def get_parking_sessions(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/parking-lots/{id}/sessions/{sid}", response_model=ApiResponse)
-        async def get_parking_session(id: str, sid: str):
-            return self.tempDefaultResponse()
-
-        @self.App.delete("/parking-lots/{id}/sessions/{sid}", response_model=ApiResponse)
-        async def delete_parking_session(id: str, sid: str):
-            return self.tempDefaultResponse()
-
         # Reservations
+        # Real reservations endpoints are provided by the reservations router.
 
-        @self.App.post("/reservations", response_model=ApiResponse)
-        async def create_reservation():
-            return self.tempDefaultResponse()
+        # Vehicles - handled by vehicle router
 
-        @self.App.put("/reservations/{id}", response_model=ApiResponse)
-        async def update_reservation(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/reservations/{id}", response_model=ApiResponse)
-        async def get_reservation(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.delete("/reservations/{id}", response_model=ApiResponse)
-        async def delete_reservation(id: str):
-            return self.tempDefaultResponse()
-
-        # Vehicles
-
-        @self.App.post("/vehicles", response_model=ApiResponse)
-        async def create_vehicle():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/vehicles", response_model=ApiResponse)
-        async def get_vehicles():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/vehicles/{username}", response_model=ApiResponse)
-        async def get_user_vehicles(username: str):
-            return self.tempDefaultResponse()
-
-        @self.App.put("/vehicles/{plate_id}", response_model=ApiResponse)
-        async def update_vehicle(plate_id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.delete("/vehicles/{plate_id}", response_model=ApiResponse)
-        async def delete_vehicle(plate_id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.post("/vehicles/{id}/entry", response_model=ApiResponse)
-        async def vehicle_entry(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/vehicles/{id}/reservations", response_model=ApiResponse)
-        async def get_vehicle_reservations(id: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/vehicles/{id}/history", response_model=ApiResponse)
-        async def get_vehicle_history(id: str):
-            return self.tempDefaultResponse()
-
-        # Payments
-
-        @self.App.post("/payments", response_model=ApiResponse)
-        async def create_payment():
-            return self.tempDefaultResponse()
-
-        @self.App.post("/payments/refund", response_model=ApiResponse)
-        async def refund_payment():
-            return self.tempDefaultResponse()
-
-        @self.App.put("/payments/{transaction}", response_model=ApiResponse)
-        async def complete_payment(transaction: str):
-            return self.tempDefaultResponse()
-
-        @self.App.get("/payments", response_model=ApiResponse)
-        async def get_payments():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/payments/{username}", response_model=ApiResponse)
-        async def get_user_payments(username: str):
-            return self.tempDefaultResponse()
+        # Payments  
 
         # Billing
-
-        @self.App.get("/billing", response_model=ApiResponse)
-        async def get_billing():
-            return self.tempDefaultResponse()
-
-        @self.App.get("/billing/{username}", response_model=ApiResponse)
-        async def get_user_billing(username: str):
-            return self.tempDefaultResponse()
 
 def run():
     print("run")

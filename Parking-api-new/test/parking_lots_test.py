@@ -1,0 +1,1127 @@
+import os
+import pytest
+import requests
+import uuid
+import sqlite3
+from datetime import datetime, timedelta
+import time
+
+BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+
+# Helper functions
+def get_admin_token():
+    """Login with the admin user created by create_test_db.py"""
+    username = "admin"
+    password = "admin"
+    
+    res = requests.post(f"{BASE_URL}/login", json={"username": username, "password": password})
+    if res.status_code == 200:
+        return res.json().get("session_token")
+    
+    raise AssertionError(
+        f"Could not login as admin. Make sure to run 'python test/create_test_db.py' first "
+        f"to create the test database with admin user."
+    )
+
+def get_test_db_path():
+    """Get test database path"""
+    test_dir = os.path.dirname(os.path.abspath(__file__))
+    api_dir = os.path.join(test_dir, '..', 'api')
+    return os.path.join(api_dir, 'data', 'parking_test.sqlite3')
+
+
+def manually_expire_grace_period(session_id):
+    """Manually set stopped_at to >15 minutes ago to simulate expired grace period"""
+    db_path = get_test_db_path()
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Set stopped_at to 20 minutes ago
+    expired_time = (datetime.now() - timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute(
+        "UPDATE p_sessions SET stopped_at = ? WHERE id = ?",
+        (expired_time, session_id)
+    )
+    conn.commit()
+    conn.close()
+    
+    # Sleep 1 second to ensure new timestamps are different
+    time.sleep(1)
+    
+    return expired_time  # Return the expired time for test assertions
+
+
+def manually_set_stopped_at_expired(session_id):
+    """Manually set stopped_at to >15 minutes ago while preserving verified_exit_at"""
+    db_path = get_test_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # Get the session's started_at time
+    cursor.execute("SELECT started_at FROM p_sessions WHERE id = ?", (session_id,))
+    row = cursor.fetchone()
+    
+    if row:
+        # Set stopped_at to 1 hour after started_at (so it's logically after start, but old enough to be "expired")
+        started_dt = datetime.strptime(row["started_at"], "%Y-%m-%d %H:%M:%S")
+        expired_time = (started_dt + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        # Fallback
+        expired_time = (datetime.now() - timedelta(minutes=20)).strftime("%Y-%m-%d %H:%M:%S")
+    
+    cursor.execute(
+        "UPDATE p_sessions SET stopped_at = ? WHERE id = ?",
+        (expired_time, session_id)
+    )
+    conn.commit()
+    conn.close()
+    
+    return expired_time
+
+
+def get_session_from_db(session_id):
+    """Get session data directly from database"""
+    db_path = get_test_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM p_sessions WHERE id = ?", (session_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    return dict(row) if row else None
+
+
+# POST /parking-lots tests
+def test_create_parking_lot_success():
+    # 1. Succesvolle aanmaak parkeerplaats
+    admin_token = get_admin_token()
+    assert admin_token is not None, "Admin token creation failed"
+    
+    lot_data = {
+        "name": "Downtown Garage",
+        "location": "Downtown",
+        "address": "456 Oak Ave",
+        "capacity": 100,
+        "tariff": 3.5,
+        "day_tariff": 20.0,
+        "lat": 52.5200,
+        "lng": 13.4050
+    }
+    res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    assert res.status_code in (200, 201), f"Status: {res.status_code}, Response: {res.text}"
+    data = res.json()
+    assert "lot_id" in data
+    assert data["parking_lot"]["name"] == "Downtown Garage"
+
+def test_create_parking_lot_missing_token():
+    # 2. Aanmaak parkeerplaats zonder token
+    lot_data = {
+        "name": "Test Lot",
+        "address": "123 Main St",
+        "capacity": 50,
+        "tariff": 5.0
+    }
+    res = requests.post(f"{BASE_URL}/parking-lots", json=lot_data)
+    assert res.status_code == 401
+    assert b"missing token" in res.content or b"Unauthorized" in res.content
+
+def test_create_parking_lot_invalid_token():
+    # 3. Aanmaak parkeerplaats met ongeldig token
+    lot_data = {
+        "name": "Test Lot",
+        "address": "123 Main St",
+        "capacity": 50,
+        "tariff": 5.0
+    }
+    res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": "invalid_token"})
+    assert res.status_code == 401
+
+def test_create_parking_lot_non_admin(register_and_login):
+    # 4. Aanmaak parkeerplaats door non-admin user
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    lot_data = {
+        "name": "Test Lot",
+        "address": "123 Main St",
+        "capacity": 50,
+        "tariff": 5.0
+    }
+    res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": user_token})
+    assert res.status_code == 403
+    assert b"admin" in res.content or b"Access denied" in res.content
+
+def test_create_parking_lot_missing_required_fields():
+    # 5. Aanmaak parkeerplaats met ontbrekende velden
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Incomplete Lot"
+        # Missing required fields: address, capacity, tariff
+    }
+    res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert res.status_code in (422, 400)
+
+# GET /parking-lots tests
+def test_get_all_parking_lots_success():
+    # 1. Ophalen alle parkeerplaatsen
+    res = requests.get(f"{BASE_URL}/parking-lots")
+    assert res.status_code == 200, f"Status: {res.status_code}, Response: {res.text}"
+    data = res.json()
+    assert "parking_lots" in data
+    assert isinstance(data["parking_lots"], list)
+
+def test_get_all_parking_lots_contains_required_fields():
+    # 2. Alle parkeerplaatsen hebben vereiste velden
+    res = requests.get(f"{BASE_URL}/parking-lots")
+    assert res.status_code == 200, f"Status: {res.status_code}, Response: {res.text}"
+    data = res.json()
+    if data["parking_lots"]:  # Als er parkeerplaatsen zijn
+        lot = data["parking_lots"][0]
+        assert "name" in lot
+        assert "capacity" in lot
+
+# GET /parking-lots/{lot_id} tests
+def test_get_single_parking_lot_success():
+    # 1. Ophalen enkele parkeerplaats
+    admin_token = get_admin_token()
+    
+    # Eerst een parkeerplaats aanmaken
+    lot_data = {
+        "name": "Test Lot Single",
+        "address": "123 Main St",
+        "capacity": 50,
+        "tariff": 5.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    if create_res.status_code in (200, 201):
+        lot_id = create_res.json().get("lot_id")
+        res = requests.get(f"{BASE_URL}/parking-lots/{lot_id}")
+        assert res.status_code == 200
+        assert res.json()["name"] == "Test Lot Single"
+
+def test_get_parking_lot_not_found():
+    # 2. Ophalen parkeerplaats die niet bestaat
+    res = requests.get(f"{BASE_URL}/parking-lots/99999")
+    assert res.status_code == 404
+    assert b"not found" in res.content or b"Not found" in res.content
+
+# PUT /parking-lots/{lot_id} tests
+def test_update_parking_lot_success():
+    # 1. Succesvolle update parkeerplaats
+    admin_token = get_admin_token()
+    
+    # Eerst een parkeerplaats aanmaken
+    lot_data = {
+        "name": "Original Name",
+        "address": "123 Main St",
+        "capacity": 50,
+        "tariff": 5.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    if create_res.status_code in (200, 201):
+        lot_id = create_res.json().get("lot_id")
+        
+        update_data = {"name": "Updated Name", "capacity": 75}
+        res = requests.put(f"{BASE_URL}/parking-lots/{lot_id}", 
+            json=update_data, 
+            headers={"Authorization": admin_token})
+        
+        assert res.status_code == 200
+        assert res.json()["parking_lot"]["name"] == "Updated Name"
+        assert res.json()["parking_lot"]["capacity"] == 75
+
+def test_update_parking_lot_not_found():
+    # 2. Update parkeerplaats die niet bestaat
+    admin_token = get_admin_token()
+    assert admin_token is not None
+    
+    update_data = {"name": "Updated Name"}
+    res = requests.put(f"{BASE_URL}/parking-lots/99999", 
+        json=update_data, 
+        headers={"Authorization": admin_token})
+    assert res.status_code == 404, f"Status: {res.status_code}, Response: {res.text}"
+
+def test_update_parking_lot_non_admin(register_and_login):
+    # 3. Update parkeerplaats door non-admin user
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    update_data = {"capacity": 75}
+    res = requests.put(f"{BASE_URL}/parking-lots/1", 
+        json=update_data, 
+        headers={"Authorization": user_token})
+    assert res.status_code == 403
+
+def test_update_parking_lot_missing_token():
+    # 4. Update parkeerplaats zonder token
+    update_data = {"capacity": 75}
+    res = requests.put(f"{BASE_URL}/parking-lots/1", json=update_data)
+    assert res.status_code == 401
+
+# DELETE /parking-lots/{lot_id} tests
+def test_delete_parking_lot_success():
+    # 1. Succesvolle delete parkeerplaats
+    admin_token = get_admin_token()
+    
+    # Eerst een parkeerplaats aanmaken
+    lot_data = {
+        "name": "Lot to Delete",
+        "address": "123 Main St",
+        "capacity": 50,
+        "tariff": 5.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    if create_res.status_code in (200, 201):
+        lot_id = create_res.json().get("lot_id")
+        res = requests.delete(f"{BASE_URL}/parking-lots/{lot_id}", 
+            headers={"Authorization": admin_token})
+        
+        assert res.status_code == 200
+        assert b"deleted" in res.content.lower()
+
+def test_delete_parking_lot_not_found():
+    # 2. Delete parkeerplaats die niet bestaat
+    admin_token = get_admin_token()
+    assert admin_token is not None
+    
+    res = requests.delete(f"{BASE_URL}/parking-lots/99999", 
+        headers={"Authorization": admin_token})
+    assert res.status_code == 404, f"Status: {res.status_code}, Response: {res.text}"
+
+def test_delete_parking_lot_non_admin(register_and_login):
+    # 3. Delete parkeerplaats door non-admin user
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    res = requests.delete(f"{BASE_URL}/parking-lots/1", 
+        headers={"Authorization": user_token})
+    assert res.status_code == 403
+
+def test_delete_parking_lot_missing_token():
+    # 4. Delete parkeerplaats zonder token
+    res = requests.delete(f"{BASE_URL}/parking-lots/1")
+    assert res.status_code == 401
+
+# POST /parking-lots/{lot_id}/sessions/start tests
+def test_start_session_success(register_and_login):
+    # 1. Succesvolle start parkeersezie
+    admin_token = get_admin_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    # Eerst een parkeerplaats aanmaken
+    lot_data = {
+        "name": "Session Test Lot",
+        "address": "789 Pine St",
+        "capacity": 30,
+        "tariff": 2.5
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    if create_res.status_code in (200, 201):
+        lot_id = create_res.json().get("lot_id")
+        
+        session_data = {"licenseplate": "ABC123"}
+        res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", 
+            json=session_data, 
+            headers={"Authorization": user_token})
+        
+        assert res.status_code == 200
+        assert b"session" in res.content.lower()
+        assert b"ABC123" in res.content
+
+def test_start_session_missing_licenseplate(register_and_login):
+    # 4. Start sessie zonder licenseplate
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    res = requests.post(f"{BASE_URL}/parking-lots/1/sessions/start", 
+        json={}, 
+        headers={"Authorization": user_token})
+    # FastAPI returns 422 for validation errors
+    assert res.status_code in (400, 422)
+
+def test_start_session_parking_lot_not_found(register_and_login):
+    # 5. Start sessie voor parkeerplaats die niet bestaat
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    session_data = {"licenseplate": "ABC123"}
+    res = requests.post(f"{BASE_URL}/parking-lots/99999/sessions/start", 
+        json=session_data, 
+        headers={"Authorization": user_token})
+    assert res.status_code == 404
+
+def test_start_duplicate_session(register_and_login):
+    # 6. Start dubbele sessie voor zelfde kenteken
+    admin_token = get_admin_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    # Eerst een parkeerplaats aanmaken
+    lot_data = {
+        "name": "Duplicate Session Test",
+        "address": "999 Elm St",
+        "capacity": 20,
+        "tariff": 3.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    if create_res.status_code in (200, 201):
+        lot_id = create_res.json().get("lot_id")
+        
+        session_data = {"licenseplate": "XYZ789"}
+        requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", 
+            json=session_data, 
+            headers={"Authorization": user_token})
+        
+        # Probeer dezelfde sessie opnieuw te starten
+        res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", 
+            json=session_data, 
+            headers={"Authorization": user_token})
+        assert res.status_code == 409
+
+# POST /parking-lots/{lot_id}/sessions/stop tests
+def test_stop_session_success(register_and_login):
+    # 1. Succesvolle stop parkeersezie
+    admin_token = get_admin_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    lot_data = {
+        "name": "Stop Session Test",
+        "address": "555 Maple St",
+        "capacity": 25,
+        "tariff": 4.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    if create_res.status_code in (200, 201):
+        lot_id = create_res.json().get("lot_id")
+        
+        # Start sessie
+        session_data = {"licenseplate": "STOP123"}
+        requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", 
+            json=session_data, 
+            headers={"Authorization": user_token})
+        
+        # Stop sessie
+        res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop", 
+            json=session_data, 
+            headers={"Authorization": user_token})
+        
+        assert res.status_code == 200
+        assert b"stopped" in res.content.lower()
+
+def test_stop_session_no_active_session(register_and_login):
+    # 2. Stop sessie wanneer geen actieve sessie bestaat
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    session_data = {"licenseplate": "NOACTIVE"}
+    res = requests.post(f"{BASE_URL}/parking-lots/1/sessions/stop", 
+        json=session_data, 
+        headers={"Authorization": user_token})
+    assert res.status_code in (404, 500), f"Status: {res.status_code}, Response: {res.text}"
+
+# GET /parking-lots/{lot_id}/sessions tests
+def test_get_all_sessions_success(register_and_login):
+    # 1. Ophalen alle sessies voor parkeerplaats
+    admin_token = get_admin_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    lot_data = {
+        "name": "Get Sessions Test",
+        "address": "111 Cedar St",
+        "capacity": 40,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    if create_res.status_code in (200, 201):
+        lot_id = create_res.json().get("lot_id")
+        
+        res = requests.get(f"{BASE_URL}/parking-lots/{lot_id}/sessions", 
+            headers={"Authorization": user_token})
+        
+        assert res.status_code == 200
+        assert b"sessions" in res.content
+
+def test_get_all_sessions_missing_token():
+    # 2. Ophalen sessies zonder token
+    res = requests.get(f"{BASE_URL}/parking-lots/1/sessions")
+    assert res.status_code == 401
+
+def test_get_all_sessions_lot_not_found(register_and_login):
+    # 3. Ophalen sessies voor parkeerplaats die niet bestaat
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    res = requests.get(f"{BASE_URL}/parking-lots/99999/sessions", 
+        headers={"Authorization": user_token})
+    assert res.status_code == 404
+
+# GET /parking-lots/{lot_id}/sessions/{session_id} tests
+def test_get_session_details_success(register_and_login):
+    # 1. Ophalen details enkele sessie
+    admin_token = get_admin_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    lot_data = {
+        "name": "Session Details Test",
+        "address": "222 Birch St",
+        "capacity": 35,
+        "tariff": 3.5
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    if create_res.status_code in (200, 201):
+        lot_id = create_res.json().get("lot_id")
+        
+        # Start sessie
+        session_data = {"licenseplate": "DETAIL1"}
+        start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", 
+            json=session_data, 
+            headers={"Authorization": user_token})
+        
+        if start_res.status_code == 200:
+            session_id = start_res.json()["session"]["id"]
+            
+            res = requests.get(f"{BASE_URL}/parking-lots/{lot_id}/sessions/{session_id}", 
+                headers={"Authorization": user_token})
+            
+            assert res.status_code == 200
+            assert b"DETAIL1" in res.content
+
+def test_get_session_details_not_found(register_and_login):
+    # 2. Ophalen sessie details die niet bestaat
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    res = requests.get(f"{BASE_URL}/parking-lots/1/sessions/99999", 
+        headers={"Authorization": user_token})
+    assert res.status_code in (404, 500), f"Status: {res.status_code}, Response: {res.text}"
+
+def test_get_session_details_missing_token():
+    # 3. Ophalen sessie details zonder token
+    res = requests.get(f"{BASE_URL}/parking-lots/1/sessions/1")
+    assert res.status_code == 401
+
+# DELETE /parking-lots/{lot_id}/sessions/{session_id} tests
+def test_delete_session_success(register_and_login):
+    # 1. Succesvolle delete sessie
+    admin_token = get_admin_token()
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    lot_data = {
+        "name": "Delete Session Test",
+        "address": "333 Spruce St",
+        "capacity": 45,
+        "tariff": 2.5
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    if create_res.status_code in (200, 201):
+        lot_id = create_res.json().get("lot_id")
+        
+        # Start sessie
+        session_data = {"licenseplate": "DEL123"}
+        start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", 
+            json=session_data, 
+            headers={"Authorization": user_token})
+        
+        if start_res.status_code == 200:
+            session_id = start_res.json()["session"]["id"]
+            
+            res = requests.delete(f"{BASE_URL}/parking-lots/{lot_id}/sessions/{session_id}", 
+                headers={"Authorization": admin_token})
+            
+            assert res.status_code == 200
+            assert b"deleted" in res.content.lower()
+
+def test_delete_session_non_admin(register_and_login):
+    # 2. Delete sessie door non-admin user
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"user_{unique_id}", "user_pw", "Regular User",
+        f"user_{unique_id}@test.com", f"+3161{unique_id}", 1990
+    )
+    
+    res = requests.delete(f"{BASE_URL}/parking-lots/1/sessions/1", 
+        headers={"Authorization": user_token})
+    assert res.status_code == 403
+
+def test_delete_session_missing_token():
+    # 3. Delete sessie zonder token
+    res = requests.delete(f"{BASE_URL}/parking-lots/1/sessions/1")
+    assert res.status_code == 401
+
+def test_delete_session_not_found():
+    # 4. Delete sessie die niet bestaat
+    admin_token = get_admin_token()
+    assert admin_token is not None
+    
+    res = requests.delete(f"{BASE_URL}/parking-lots/1/sessions/99999", 
+        headers={"Authorization": admin_token})
+    assert res.status_code == 404, f"Status: {res.status_code}, Response: {res.text}"
+
+# Capacity tests
+def test_start_session_without_account_within_capacity():
+    # Test: Iemand rijdt zonder account naar binnen (binnen capaciteit)
+    admin_token = get_admin_token()
+    
+    # Maak parkeerplaats aan
+    lot_data = {
+        "name": "Anonymous Test Lot",
+        "address": "777 Anonymous St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    assert create_res.status_code in (200, 201), f"Failed to create lot: {create_res.text}"
+    lot_id = create_res.json().get("lot_id")
+    
+    # Start sessie ZONDER authorization token
+    session_data = {"licenseplate": "ANON-123"}
+    res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", 
+        json=session_data)
+    
+    assert res.status_code == 200, f"Status: {res.status_code}, Response: {res.text}"
+    data = res.json()
+    assert "session" in data
+    assert data["session"]["licenseplate"] == "ANON-123"
+    assert data["session"]["user"] is None or data["session"]["user"] == "null"
+
+def test_start_session_parking_lot_full():
+    # Test: Parkeerplaats is helemaal vol
+    admin_token = get_admin_token()
+    
+    # Maak parkeerplaats aan met capaciteit van 2
+    lot_data = {
+        "name": "Full Lot Test",
+        "address": "888 Full St",
+        "capacity": 2,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    assert create_res.status_code in (200, 201), f"Failed to create lot: {create_res.text}"
+    lot_id = create_res.json().get("lot_id")
+    
+    # Start 2 sessies om de parkeerplaats vol te maken
+    session1 = {"licenseplate": "FULL-001"}
+    res1 = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", json=session1)
+    assert res1.status_code == 200, f"Failed to start session 1: {res1.text}"
+    
+    session2 = {"licenseplate": "FULL-002"}
+    res2 = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", json=session2)
+    assert res2.status_code == 200, f"Failed to start session 2: {res2.text}"
+    
+    # Probeer derde auto naar binnen te laten - moet falen
+    session3 = {"licenseplate": "FULL-003"}
+    res3 = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", json=session3)
+    
+    assert res3.status_code == 409, f"Expected 409, got {res3.status_code}: {res3.text}"
+    assert b"full" in res3.content.lower() or b"occupied" in res3.content.lower()
+
+def test_start_session_blocked_by_upcoming_reservation(register_and_login):
+    # Test: 1 plek over maar er staat een reservering over 10 minuten
+    from datetime import datetime, timedelta
+    
+    admin_token = get_admin_token()
+    
+    # Maak een user aan voor de reservering
+    unique_id = uuid.uuid4().hex[:6]
+    user_token = register_and_login(
+        f"resuser_{unique_id}", "user_pw", "Reservation User",
+        f"resuser_{unique_id}@test.com", f"+3162{unique_id}", 1990
+    )
+    
+    # Haal user info op om user_id te krijgen
+    profile_res = requests.get(f"{BASE_URL}/profile", headers={"Authorization": user_token})
+    assert profile_res.status_code == 200, f"Failed to get profile: {profile_res.text}"
+    user_id = profile_res.json().get("id")
+    assert user_id is not None, "Could not get user_id from profile"
+    
+    # Maak parkeerplaats aan met capaciteit van 1
+    lot_data = {
+        "name": "Reservation Block Test",
+        "address": "999 Reserved St",
+        "capacity": 1,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    
+    assert create_res.status_code in (200, 201), f"Failed to create lot: {create_res.text}"
+    lot_id = create_res.json().get("lot_id")
+    
+    # Maak een vehicle aan voor de reservering (indien nodig)
+    vehicle_data = {
+        "license_plate": f"RES-{unique_id}",
+        "make": "Tesla",
+        "model": "Model 3",
+        "color": "Red"
+    }
+    vehicle_res = requests.post(f"{BASE_URL}/vehicles", 
+        json=vehicle_data, 
+        headers={"Authorization": user_token})
+    assert vehicle_res.status_code in (200, 201), f"Failed to create vehicle: {vehicle_res.text}"
+    vehicle_response = vehicle_res.json()
+    vehicle_id = vehicle_response.get("vehicle", {}).get("id")
+    
+    # Maak reservering die over 10 minuten start
+    start_time = datetime.now() + timedelta(minutes=10)
+    end_time = start_time + timedelta(hours=2)
+    
+    reservation_data = {
+        "parking_lot_id": lot_id,
+        "vehicle_id": vehicle_id,
+        "start_time": start_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "end_time": end_time.strftime("%Y-%m-%d %H:%M:%S"),
+        "status": "confirmed"
+    }
+    
+    res_res = requests.post(f"{BASE_URL}/reservations", 
+        json=reservation_data, 
+        headers={"Authorization": user_token})
+    assert res_res.status_code in (200, 201), f"Failed to create reservation: {res_res.text}"
+    
+    # Probeer nu iemand anders (of zonder account) naar binnen te laten
+    # Dit moet falen omdat de enige plek gereserveerd is
+    session_data = {"licenseplate": "BLOCKED-123"}
+    session_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start", 
+        json=session_data)
+    
+    assert session_res.status_code == 409, f"Expected 409, got {session_res.status_code}: {session_res.text}"
+    response_text = session_res.content.lower()
+    assert b"full" in response_text or b"reservation" in response_text, \
+        f"Expected message about being full or reservation, got: {session_res.text}"
+
+# FRAUD PREVENTION TESTS
+# Tests for verified_exit_at column and 15-minute grace period functionality
+
+def test_fraud_normal_exit_within_grace_period():
+    """
+    Fraud Prevention Test 1: Normal user behavior - exits within 15 minutes
+    User should be able to start a new session after verified exit
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Normal Exit Test Lot",
+        "address": "123 Normal St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "NORMAL123"
+    
+    # Start session
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    assert start_res.status_code == 200
+    session_id = start_res.json()["session"]["id"]
+    
+    # Stop session
+    stop_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    assert stop_res.status_code == 200
+    assert "15 minutes" in stop_res.json()["message"]
+    
+    # Verify stopped_at is set
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] is not None
+    assert db_session["verified_exit_at"] is None
+    
+    # Exit through barrier
+    barrier_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/verify-exit",
+        json={"licenseplate": license_plate})
+    assert barrier_res.status_code == 200
+    assert barrier_res.json()["verified"] is True
+    
+    # Verify verified_exit_at is set
+    db_session = get_session_from_db(session_id)
+    assert db_session["verified_exit_at"] is not None
+    
+    # Should be able to start new session
+    new_session_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    assert new_session_res.status_code == 200, f"Should allow new session after verified exit: {new_session_res.text}"
+
+
+def test_fraud_attempt_grace_period_expired():
+    """
+    Fraud Prevention Test 2: Fraud attempt - stays parked after stopping session
+    Session should be auto-resumed after grace period expires
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Fraud Test Lot",
+        "address": "123 Fraud St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "FRAUD01"
+    
+    # Start and stop session
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    session_id = start_res.json()["session"]["id"]
+    
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    
+    # Manually expire grace period
+    manually_expire_grace_period(session_id)
+    
+    # Verify session is stopped but not verified
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] is not None
+    assert db_session["verified_exit_at"] is None
+    
+    # Try to start new session - should trigger check_and_resume
+    new_session_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    
+    # Should fail because session was resumed
+    assert new_session_res.status_code == 409
+    assert "already active" in new_session_res.json()["detail"]
+    
+    # Verify session was resumed (stopped_at cleared)
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] is None, "Session should be resumed (stopped_at = NULL)"
+
+
+def test_fraud_barrier_exit_after_grace_expired():
+    """
+    Fraud Prevention Test 3: User exits through barrier after grace period expired
+    Barrier should auto-stop the resumed session at current time
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Late Exit Test Lot",
+        "address": "123 Late St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "LATE123"
+    
+    # Start and stop session
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    session_id = start_res.json()["session"]["id"]
+    
+    stop_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    original_stop_time = stop_res.json()["session"]["stopped"]
+    
+    # Manually expire grace period (returns the expired time we set)
+    expired_time = manually_expire_grace_period(session_id)
+    
+    # Exit through barrier
+    barrier_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/verify-exit",
+        json={"licenseplate": license_plate})
+    assert barrier_res.status_code == 200
+    
+    # Verify session was stopped at barrier time (not the expired time we set)
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] is not None
+    assert db_session["verified_exit_at"] is not None
+    assert db_session["stopped_at"] != expired_time, "stopped_at should be updated to barrier exit time (not the expired time)"
+
+
+def test_fraud_cannot_start_during_grace_period():
+    """
+    Fraud Prevention Test 4: User tries to start new session while in grace period
+    Should be blocked with error message
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Grace Period Test Lot",
+        "address": "123 Grace St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "GRACE01"
+    
+    # Start and stop session
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    
+    # Try to start new session immediately
+    new_session_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    
+    assert new_session_res.status_code == 409
+    detail = new_session_res.json()["detail"]
+    assert "grace period" in detail or "waiting for exit" in detail
+
+
+def test_fraud_never_stops_just_exits():
+    """
+    Fraud Prevention Test 5: User never stops manually, just drives to barrier
+    Barrier should auto-stop and verify in one action
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "No Stop Test Lot",
+        "address": "123 NoStop St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "NOSTOP1"
+    
+    # Start session but don't stop
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    session_id = start_res.json()["session"]["id"]
+    
+    # Drive directly to barrier
+    barrier_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/verify-exit",
+        json={"licenseplate": license_plate})
+    assert barrier_res.status_code == 200
+    assert "auto-stopped" in barrier_res.json()["message"]
+    
+    # Verify both stopped_at and verified_exit_at are set
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] is not None
+    assert db_session["verified_exit_at"] is not None
+    assert db_session["stopped_at"] == db_session["verified_exit_at"]
+
+
+def test_fraud_stop_again_after_grace_expired():
+    """
+    Fraud Prevention Test 6: User presses stop again after grace period expired
+    Should resume session first, then stop with new time
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Double Stop Test Lot",
+        "address": "123 DoubleStop St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "STOP2X"
+    
+    # Start and stop session
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    session_id = start_res.json()["session"]["id"]
+    
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    
+    # Manually expire grace period (returns the expired time we set)
+    expired_time = manually_expire_grace_period(session_id)
+    
+    # Press stop again
+    second_stop = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    assert second_stop.status_code == 200
+    
+    # Verify stopped_at was updated to new time (not the expired time we set)
+    db_session = get_session_from_db(session_id)
+    assert db_session["stopped_at"] != expired_time, "stopped_at should be updated on second stop (not the expired time)"
+    assert db_session["verified_exit_at"] is None
+
+
+def test_fraud_verified_exit_prevents_resume():
+    """
+    Fraud Prevention Test 7: Verified exit should prevent session from being resumed
+    Even after >15 minutes, if verified_exit_at is set, session stays stopped
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "Verified Prevents Resume Lot",
+        "address": "123 Verified St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "VERIFY1"
+    
+    # Start, stop, and verify exit
+    start_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    session_id = start_res.json()["session"]["id"]
+    
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/stop",
+        json={"licenseplate": license_plate})
+    requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/verify-exit",
+        json={"licenseplate": license_plate})
+    
+    # Manually set stopped_at to >15 minutes ago (but keep verified_exit_at)
+    manually_set_stopped_at_expired(session_id)
+    
+    # Try to start new session - should succeed because verified_exit_at is set
+    new_session_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/start",
+        json={"licenseplate": license_plate})
+    
+    assert new_session_res.status_code == 200, "Should allow new session when verified_exit_at is set"
+    
+    # Verify old session was NOT resumed
+    old_session = get_session_from_db(session_id)
+    assert old_session["stopped_at"] is not None, "Verified session should NOT be resumed"
+    assert old_session["verified_exit_at"] is not None
+
+
+def test_fraud_no_session_barrier_exit():
+    """
+    Fraud Prevention Test 8: Barrier detects exit for non-existent session
+    Should return 404 error
+    """
+    admin_token = get_admin_token()
+    
+    lot_data = {
+        "name": "No Session Test Lot",
+        "address": "123 NoSession St",
+        "capacity": 10,
+        "tariff": 2.0
+    }
+    create_res = requests.post(f"{BASE_URL}/parking-lots", 
+        json=lot_data, 
+        headers={"Authorization": admin_token})
+    assert create_res.status_code in (200, 201)
+    lot_id = create_res.json()["lot_id"]
+    
+    license_plate = "NOSESS1"
+    
+    # Try to verify exit without starting session
+    barrier_res = requests.post(f"{BASE_URL}/parking-lots/{lot_id}/sessions/verify-exit",
+        json={"licenseplate": license_plate})
+    assert barrier_res.status_code == 404
+    assert "No active or pending session" in barrier_res.json()["detail"]

@@ -1,7 +1,10 @@
 import hashlib
+from typing import Optional
 import bcrypt
 from cryptography.fernet import Fernet
-import constants
+from fastapi import HTTPException, Header
+from api import constants
+from api.utils import session_manager
 
 _fernet = Fernet(constants.FERNET_KEY)
 
@@ -31,4 +34,8 @@ def verify_password(password: str, stored_encrypted_hash: str, hash_version: str
         # Check wachtwoord met de bcrypt hash
         return bcrypt.checkpw(password.encode('utf-8'), decrypted_hash)
 
-
+def get_current_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+    """Get current user via FastAPI Header dependency"""
+    if not authorization:
+        return None
+    return session_manager.get_session(authorization)

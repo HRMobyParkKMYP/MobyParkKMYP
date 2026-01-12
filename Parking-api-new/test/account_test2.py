@@ -1,30 +1,9 @@
+import os
 import pytest
 import requests
-import sqlite3
-import os
 from datetime import datetime
 
-BASE_URL = "http://localhost:8000"
-
-def get_test_db_path():
-    """Test database path"""
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    api_dir = os.path.join(test_dir, '..', 'api')
-    return os.path.join(api_dir, 'data', 'parking_test.sqlite3')
-
-@pytest.fixture(scope="session", autouse=True)
-def cleanup_after_all_tests():
-    """Clear users table na tests"""
-    yield  # Eerst alle tests uitvoeren
-    # Daarna de cleanup uitvoeren
-    db_path = get_test_db_path()
-    if os.path.exists(db_path):
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM users")
-        conn.commit()
-        conn.close()
-        print("Cleaned up")
+BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 
 # POST register tests
 def test_register_success():

@@ -15,19 +15,24 @@ env:
   CONTAINER_PORT: 8000
   HOST_PORT: 8000
   WORKING_DIR: Parking-api-new
+  DEPLOY_DIR: /opt/mobypark-deploy
 
 jobs:
   test-build-deploy:
     runs-on: ubuntu-latest
     environment: mobypark-api
     
-    defaults:
-      run:
-        working-directory: ${{ env.WORKING_DIR }}
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      
+      - name: Verify Docker access
+        run: |
+          echo "Checking Docker installation..."
+          docker --version
+          echo "Checking Docker daemon..."
+          docker ps
+          echo "Docker access verified ✓"
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -35,6 +40,7 @@ jobs:
           python-version: '3.11'
       
       - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then
@@ -44,20 +50,37 @@ jobs:
           fi
       
       - name: Install test dependencies
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           pip install pytest pytest-cov pytest-asyncio httpx
       
       - name: Run tests
+        working-directory: ${{ env.WORKING_DIR }}
         run: |
           export PYTHONPATH="${PYTHONPATH}:$(pwd)/api"
           pytest test/ -v --cov=api --cov-report=term-missing || echo "Tests completed with warnings"
         continue-on-error: false
       
       - name: Build Docker image
-        working-directory: .
         run: |
           docker build -f Parking-api-new/Dockerfile -t ${{ env.DOCKER_IMAGE }}:${{ github.sha }} ./Parking-api-new
           docker tag ${{ env.DOCKER_IMAGE }}:${{ github.sha }} ${{ env.DOCKER_IMAGE }}:latest
+      
+      - name: Prepare deployment directory
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "Creating deployment directory..."
+          mkdir -p ${{ env.DEPLOY_DIR }}
+          
+          echo "Copying repository to deployment directory..."
+          rsync -av --delete \
+            --exclude '.git' \
+            --exclude '_actions' \
+            --exclude '_work' \
+            ./ ${{ env.DEPLOY_DIR }}/
+          
+          echo "Repository copied to ${{ env.DEPLOY_DIR }}"
+          ls -la ${{ env.DEPLOY_DIR }}
       
       - name: Stop old container
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -72,22 +95,22 @@ jobs:
           API_HOST_IP: ${{ secrets.API_HOST_IP }}
           API_HOST_PORT: ${{ secrets.API_HOST_PORT }}
         run: |
-          set -euo pipefail
-          : "${FERNET_KEY:?Missing secret FERNET_KEY}"
-          : "${API_HOST_IP:?Missing secret API_HOST_IP}"
-          : "${API_HOST_PORT:?Missing secret API_HOST_PORT}"
-
-          docker stop "${{ env.APP_NAME }}" 2>/dev/null || true
-          docker rm "${{ env.APP_NAME }}" 2>/dev/null || true
-
+          cd ${{ env.DEPLOY_DIR }}
+          
           docker run -d \
             --name "${{ env.APP_NAME }}" \
             --restart unless-stopped \
-            -p "${{ env.HOST_PORT }}:${API_HOST_PORT}" \
-            -e FERNET_KEY="${FERNET_KEY}" \
-            -e API_HOST_IP="${API_HOST_IP}" \
-            -e API_HOST_PORT="${API_HOST_PORT}" \
-            "${{ env.DOCKER_IMAGE }}:latest"
+            -p ${{ env.HOST_PORT }}:${{ env.CONTAINER_PORT }} \
+            -e DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            -e SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+            -v ${{ env.DEPLOY_DIR }}/${{ env.WORKING_DIR }}/parking.sqlite3:/app/parking.sqlite3 \
+            ${{ env.DOCKER_IMAGE }}:latest
+          
+          echo "Waiting for container to start..."
+          sleep 5
+          
+          # Check if container is running
+          docker ps | grep ${{ env.APP_NAME }}
       
       - name: Health check (inside container)
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'

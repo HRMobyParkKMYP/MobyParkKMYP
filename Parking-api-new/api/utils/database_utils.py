@@ -54,6 +54,23 @@ def create_user(username: str, password_hash: str, name: str, email: str,
         cursor.execute(query, (username, password_hash, name, email, phone, 
                               role, birth_year, hash_v, salt, created_at))
         return cursor.lastrowid
+    
+def create_admin_user(username: str, password_hash: str, name: str, email: str, 
+                phone: str, birth_year: int, role: str = 'ADMIN', 
+                hash_v: str = 'bcrypt', salt: str = None) -> int:
+    """Maak nieuwe admin, geeft admin ID"""
+    created_at = datetime.now().strftime("%Y-%m-%dT00:00:00Z")
+    
+    query = """
+        INSERT INTO users (username, password_hash, name, email, phone, 
+                          role, birth_year, active, hash_v, salt, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+    """
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, (username, password_hash, name, email, phone, 
+                              role, birth_year, hash_v, salt, created_at))
+        return cursor.lastrowid
 
 def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     """Get user by username"""
@@ -72,3 +89,28 @@ def get_user_by_phone(phone: str) -> Optional[Dict[str, Any]]:
     query = "SELECT * FROM users WHERE phone = ?"
     results = execute_query(query, (phone,))
     return results[0] if results else None
+
+def update_user_by_username(username: str, fields: dict) -> int:
+    """
+    Update user fields for a user identified by `username`.
+    Returns number of affected rows (0 if user not found).
+    """
+    if not fields:
+        return 0
+
+    cols = []
+    params = []
+    for k, v in fields.items():
+        cols.append(f"{k} = ?")
+        params.append(v)
+
+    params.append(username)
+    query = f"UPDATE users SET {', '.join(cols)} WHERE username = ?"
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, tuple(params))
+        return cursor.rowcount
+def get_all_users() -> List[Dict[str, Any]]:
+    """Get alle users"""
+    query = "SELECT * FROM users ORDER BY created_at DESC"
+    return execute_query(query)
