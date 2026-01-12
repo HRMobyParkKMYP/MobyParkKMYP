@@ -1,0 +1,8 @@
+{
+  "pythonVersion": "3.9",
+  "pythonPlatform": "Windows",
+  "typeCheckingMode": "basic",
+  "include": ["api", "test"],
+  "extraPaths": ["api"],
+  "reportMissingImports": true
+}

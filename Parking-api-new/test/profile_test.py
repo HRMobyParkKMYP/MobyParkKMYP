@@ -25,15 +25,16 @@ def ensure_test_mode_env():
 
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_before_and_after_tests():
-    """Clear users table before and after tests"""
+    """Clear non-admin users table before and after tests"""
     db_path = get_test_db_path()
     if os.path.exists(db_path):
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         try:
-            cursor.execute("DELETE FROM users")
+            # Preserve admin user
+            cursor.execute("DELETE FROM users WHERE username != 'admin'")
             conn.commit()
-            print("Cleaned up test users before tests")
+            print("Cleaned up test users before tests (preserved admin)")
         except Exception:
             pass
         finally:
@@ -46,9 +47,10 @@ def cleanup_before_and_after_tests():
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         try:
-            cursor.execute("DELETE FROM users")
+            # Preserve admin user
+            cursor.execute("DELETE FROM users WHERE username != 'admin'")
             conn.commit()
-            print("Cleaned up test users after tests")
+            print("Cleaned up test users after tests (preserved admin)")
         except Exception:
             pass
         finally:

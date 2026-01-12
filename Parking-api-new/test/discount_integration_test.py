@@ -13,8 +13,13 @@ BASE_URL = "http://localhost:8000"
 
 @pytest.fixture
 def discount_db():
-    """Get the appropriate database path (main db, not test db, since server likely uses main)"""
-    db_path = Path(__file__).parent.parent / "api" / "data" / "parking.sqlite3"
+    """Get the appropriate database path (use test db when in test mode)"""
+    import os
+    # Check if in test mode
+    if os.environ.get('TEST_MODE') == 'true':
+        db_path = Path(__file__).parent.parent / "api" / "data" / "parking_test.sqlite3"
+    else:
+        db_path = Path(__file__).parent.parent / "api" / "data" / "parking.sqlite3"
     return str(db_path)
 
 
