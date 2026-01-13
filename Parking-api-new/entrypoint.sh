@@ -5,11 +5,11 @@ set -e
 : "${API_HOST_IP:?API_HOST_IP is required}"
 : "${API_HOST_PORT:?API_HOST_PORT is required}"
 
-cat > /api/.env <<EOF
+cat > /app/api/.env <<EOF
 FERNET_KEY=${FERNET_KEY}
 API_HOST_IP=${API_HOST_IP}
 API_HOST_PORT=${API_HOST_PORT}
 EOF
 
-cd /api
+cd /app/api
 exec python server.py
