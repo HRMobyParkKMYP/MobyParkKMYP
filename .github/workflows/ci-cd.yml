@@ -57,6 +57,10 @@ jobs:
       
       - name: Run tests
         working-directory: ${{ env.WORKING_DIR }}
+        env:
+          API_HOST_IP: "0.0.0.0"
+          API_HOST_PORT: "8000"
+          FERNET_KEY: ${{ secrets.FERNET_KEY }}
         run: |
           export PYTHONPATH="${PYTHONPATH}:$(pwd)/api"
           pytest test/ -v --cov=api --cov-report=term-missing || echo "Tests completed with warnings"
