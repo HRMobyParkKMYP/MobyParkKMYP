@@ -137,7 +137,9 @@ def get_schemas():
             amount REAL CHECK (amount >= 0),
             applies_to TEXT CHECK (applies_to IN ('reservation','session','both')) DEFAULT 'both',
             starts_at TEXT,
-            ends_at TEXT
+            ends_at TEXT,
+            parking_lot_id INTEGER,
+            FOREIGN KEY (parking_lot_id) REFERENCES parking_lots(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED
         )"""
     ]
 
