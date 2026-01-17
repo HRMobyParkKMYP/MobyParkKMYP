@@ -6,6 +6,7 @@ import os
 import sys
 from datetime import datetime, timedelta
 import bcrypt
+from cryptography.fernet import Fernet
 
 # Add api directory to path
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -15,12 +16,23 @@ sys.path.insert(0, api_dir)
 # Set TEST_MODE before importing utils
 os.environ['TEST_MODE'] = 'true'
 
+# Get Fernet key from environment
+FERNET_KEY = os.getenv("FERNET_KEY", "")
+if not FERNET_KEY:
+    print("Warning: FERNET_KEY not set, using default (not secure for production!)")
+    FERNET_KEY = Fernet.generate_key().decode()
+
+_fernet = Fernet(FERNET_KEY.encode() if isinstance(FERNET_KEY, str) else FERNET_KEY)
+
 
 def hash_password(password):
-    """Hash password using bcrypt"""
+    """Hash password using bcrypt then encrypt with Fernet (matching auth_utils.hash_password_bcrypt)"""
     salt = bcrypt.gensalt()
+    # Hash password with bcrypt
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-    return hashed.decode('utf-8'), salt.decode('utf-8')
+    # Encrypt hash with fernet
+    encrypted_hash = _fernet.encrypt(hashed).decode('utf-8')
+    return encrypted_hash, salt.decode('utf-8')
 
 
 def get_schemas():
