@@ -78,8 +78,8 @@ def get_schemas():
         )""",
         """CREATE TABLE parking_lot_managers (
             user_id INTEGER NOT NULL,
-            parkinglot_id INTEGER NOT NULL,
-            FOREIGN KEY(parkinglot_id) REFERENCES parking_lots(id),
+            parking_lot_id INTEGER NOT NULL,
+            FOREIGN KEY(parking_lot_id) REFERENCES parking_lots(id),
             FOREIGN KEY(user_id) REFERENCES users(id)
         )""",
         """CREATE TABLE reservations (
@@ -200,7 +200,7 @@ def insert_test_data(cursor):
     
     # Parking lot managers
     print("  - Assigning parking lot managers...")
-    cursor.execute("INSERT INTO parking_lot_managers (user_id, parkinglot_id) VALUES (3, 1)")
+    cursor.execute("INSERT INTO parking_lot_managers (user_id, parking_lot_id) VALUES (3, 1)")
     
     # Reservations
     print("  - Creating reservations...")
