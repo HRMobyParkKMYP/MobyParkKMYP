@@ -153,9 +153,9 @@ def insert_test_data(cursor):
     
     # Users
     print("  - Creating users...")
-    admin_pw_hash, admin_salt = hash_password("admin123")
-    user_pw_hash, user_salt = hash_password("user123")
-    manager_pw_hash, manager_salt = hash_password("manager123")
+    admin_pw_hash, admin_salt = hash_password("admin")
+    user_pw_hash, user_salt = hash_password("testuser")
+    manager_pw_hash, manager_salt = hash_password("manager")
     
     cursor.execute("""
         INSERT INTO users (id, username, password_hash, name, email, phone, role, created_at, birth_year, active, hash_v, salt)
@@ -268,9 +268,9 @@ def create_test_database():
     
     print(f"\n✓ Test database created successfully: {test_db}")
     print("\nTest users created:")
-    print("  - admin / admin123 (ADMIN)")
-    print("  - testuser / user123 (USER)")
-    print("  - manager / manager123 (MANAGER)")
+    print("  - admin / admin (ADMIN)")
+    print("  - testuser / testuser (USER)")
+    print("  - manager / manager (MANAGER)")
 
 
 if __name__ == "__main__":
