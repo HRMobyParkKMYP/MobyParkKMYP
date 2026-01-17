@@ -55,6 +55,13 @@ jobs:
         run: |
           pip install pytest pytest-cov pytest-asyncio httpx
       
+      - name: Create test database
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "Creating test database..."
+          python test/create_test_db.py
+          echo "Test database created successfully"
+      
       - name: Run tests
         working-directory: ${{ env.WORKING_DIR }}
         env:
