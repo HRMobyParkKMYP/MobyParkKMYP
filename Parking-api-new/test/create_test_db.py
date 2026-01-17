@@ -45,7 +45,7 @@ def get_schemas():
             name TEXT,
             email TEXT,
             phone TEXT,
-            role TEXT CHECK (role IN ('USER','ADMIN','MANAGER')) DEFAULT 'USER',
+            role TEXT CHECK (role IN ('USER','ADMIN','MANAGER','PARKING_LOT_MANAGER')) DEFAULT 'USER',
             created_at TEXT,
             birth_year INTEGER CHECK (birth_year BETWEEN 1900 AND 2100),
             active INTEGER CHECK (active IN (0,1)) DEFAULT 1,
