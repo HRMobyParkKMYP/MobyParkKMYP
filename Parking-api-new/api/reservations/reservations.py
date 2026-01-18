@@ -157,7 +157,7 @@ async def update_reservation(rid: int, data: ReservationUpdateRequest, authoriza
                 )
     
     # Build updated fields
-    update_data = {k: v for k, v in data.dict(exclude_unset=True).items() if v is not None}
+    update_data = {k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None}
     
     db.update_reservation(rid, update_data)
     
