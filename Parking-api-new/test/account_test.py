@@ -1,6 +1,7 @@
 import os
 import pytest
 import requests
+import uuid
 from datetime import datetime
 
 BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
@@ -8,12 +9,13 @@ BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 # POST register tests
 def test_register_success():
     # 1. Succesvolle registratie
+    unique_id = uuid.uuid4().hex[:6]
     data = {
-        "username": "emma",
+        "username": f"emma_{unique_id}",
         "password": "geheim",
         "name": "Emma de Vries",
-        "email": "emma@example.com",
-        "phone": "+31612345678",
+        "email": f"emma_{unique_id}@example.com",
+        "phone": f"+31{hash(unique_id) % 900000000 + 100000000}",
         "birth_year": 1995
     }
 
@@ -22,7 +24,7 @@ def test_register_success():
     assert "User created" in res.text
 
     res2 = requests.post(f"{BASE_URL}/login", json={
-            "username": "emma",
+            "username": data["username"],
             "password": "geheim"
         })
     assert res2.status_code == 200
