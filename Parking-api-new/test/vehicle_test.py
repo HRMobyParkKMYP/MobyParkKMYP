@@ -271,8 +271,38 @@ def test_get_vehicles_success(register_and_login):
     assert any(v["license_plate"] == "GET-123" for v in vehicles)
     assert any(v["license_plate"] == "GET-456" for v in vehicles)
 
+def test_get_vehicle_reservations_empty(register_and_login):
+    # 2. Opvraging reserveringen voor voertuig zonder reserveringen
+    token = register_and_login("resuser", "pw", "Res Gebruiker", "16", "30192114", 1990)
 
+    create = requests.post(f"{BASE_URL}/vehicles",
+                           headers={"Authorization": token},
+                           json={"license_plate": "RES-001", "make": "Peugeot", "model": "208"})
+    assert create.status_code == 201
 
+    vehicles = requests.get(f"{BASE_URL}/vehicles",
+                            headers={"Authorization": token}).json()
+    vid = vehicles[0]["id"]
 
+    res = requests.get(f"{BASE_URL}/vehicles/{vid}/reservations",
+                       headers={"Authorization": token})
+    assert res.status_code == 200
+    assert res.json() == []
 
+def test_get_vehicle_history_empty(register_and_login):
+    # 3. Opvraging geschiedenis voor voertuig zonder geschiedenis
+    token = register_and_login("histuser", "pw", "History User", "17", "30192124", 1990)
 
+    create = requests.post(f"{BASE_URL}/vehicles",
+                           headers={"Authorization": token},
+                           json={"license_plate": "HIST-001", "make": "VW", "model": "Golf"})
+    assert create.status_code == 201
+
+    vehicles = requests.get(f"{BASE_URL}/vehicles",
+                            headers={"Authorization": token}).json()
+    vid = vehicles[0]["id"]
+
+    res = requests.get(f"{BASE_URL}/vehicles/{vid}/history",
+                       headers={"Authorization": token})
+    assert res.status_code == 200
+    assert res.json() == []
