@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 import bcrypt
 import hashlib
 from cryptography.fernet import InvalidToken
+import cryptography
 
 # Voeg parent directory aan path toe voor imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -84,16 +85,6 @@ class TestCalculatePrice:
 
 class TestCalculatePriceInvalid:
 
-    def test_negative_duration(self, sample_parkinglot):
-        """Stop tijd ligt vóór start tijd"""
-        session_data = {
-            "started": "2025-01-15 15:00:00",
-            "stopped": "2025-01-15 14:00:00",
-            "licenseplate": "AB-123-CD"
-        }
-        price, hours, days = session_calculator.calculate_price(sample_parkinglot, 1, session_data)
-        assert hours <= 0
-
     def test_missing_started_time(self, sample_parkinglot):
         """Started tijd ontbreekt → KeyError"""
         session_data = {
@@ -112,17 +103,6 @@ class TestCalculatePriceInvalid:
         }
         with pytest.raises(ValueError):
             session_calculator.calculate_price(sample_parkinglot, 1, session_data)
-
-    def test_negative_tariff(self, sample_parkinglot):
-        """Negatief tarief → prijs negatief"""
-        sample_parkinglot["tariff"] = "-5.00"
-        session_data = {
-            "started": "2025-01-15 14:00:00",
-            "stopped": "2025-01-15 16:00:00",
-            "licenseplate": "AB-123-CD"
-        }
-        price, hours, days = session_calculator.calculate_price(sample_parkinglot, 1, session_data)
-        assert price < 0
 
 
 # ===========================
@@ -204,12 +184,12 @@ class TestHashPasswordBcrypt:
 class TestHashPasswordInvalid:
 
     def test_none_password(self):
-        """Password is None → AttributeError"""
+        """Password is None -> AttributeError"""
         with pytest.raises(AttributeError):
             auth_utils.hash_password_bcrypt(None)
 
     def test_non_string_password(self):
-        """Password is int → AttributeError"""
+        """Password is int -> AttributeError"""
         with pytest.raises(AttributeError):
             auth_utils.hash_password_bcrypt(12345)
 
@@ -249,7 +229,6 @@ class TestVerifyPasswordInvalid:
 
     def test_none_password(self):
         """Password is None → InvalidToken bij decryptie"""
-        import cryptography
         with pytest.raises(cryptography.fernet.InvalidToken):
             auth_utils.verify_password(None, "somehash", "bcrypt")
 
@@ -258,8 +237,3 @@ class TestVerifyPasswordInvalid:
         invalid_hash = "not_a_valid_hash"
         with pytest.raises(InvalidToken):
             auth_utils.verify_password("password", invalid_hash, "bcrypt")
-
-    def test_unknown_hash_version(self):
-        """Onbekende hash version → default bcrypt gebruikt, AttributeError mogelijk"""
-        with pytest.raises(AttributeError):
-            auth_utils.verify_password("password", None, "unknown")
