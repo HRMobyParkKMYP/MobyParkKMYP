@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional
 from utils.session_manager import get_session
 from models.ParkingLot import ParkingLot
-from . import parking_lots_utils as db
+from utils import parking_lots_utils as db
 
 router = APIRouter()
 
