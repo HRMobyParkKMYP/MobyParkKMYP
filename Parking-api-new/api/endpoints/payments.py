@@ -11,7 +11,7 @@ from utils.payment_utils import (
     get_payment_by_external_ref,
     get_user_payments_db
 )
-from discounts.discount_utils import apply_discount_to_payment, get_discount_by_code
+from utils.discount_utils import apply_discount_to_payment, get_discount_by_code
 
 router = APIRouter()
 

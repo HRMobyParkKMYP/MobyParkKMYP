@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
 from utils.session_manager import get_session
-from . import reservations_utils as db
+from utils import reservations_utils as db
 
 router = APIRouter()
 
