@@ -68,3 +68,10 @@ def get_user_payments_db(username: str) -> List[Dict[str, Any]]:
         WHERE u.username = ?
     """
     return execute_query(query, (username,))
+def update_payment_db(external_ref: str, status: str, paid_at: datetime) -> bool:
+    """DB logic for updating a payment's status and paid_at"""
+    query = "UPDATE payments SET status = ?, paid_at = ? WHERE external_ref = ?"
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(query, (status, paid_at.isoformat(), external_ref))
+        return cursor.rowcount > 0
