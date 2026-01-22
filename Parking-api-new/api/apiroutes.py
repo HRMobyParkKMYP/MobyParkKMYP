@@ -4,15 +4,15 @@ import constants
 import os
 from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
-from endpoints.account import router as account
-from endpoints.profile import router as profile
-from endpoints.vehicle import router as vehicle
-from endpoints.payments import router as payments
-from endpoints.parking_lots import router as parking_lots
+from endpoints import account
+from endpoints import profile
+from endpoints import vehicle
+from endpoints import payments
+from endpoints import parking_lots
 from utils.database_utils import get_db_path
-from endpoints.billing import router as billing
-from endpoints.reservations import router as reservations
-from endpoints.discounts import router as discounts
+from endpoints import billing
+from endpoints import reservations
+from endpoints import discounts
 
 class ApiResponse(BaseModel):
     StatusResponse: dict
@@ -49,14 +49,14 @@ class Apiroutes:
     
     def SetupEndpoints(self) -> None:
         """Include all endpoint routers"""
-        self.App.include_router(account, tags=["Account"])
-        self.App.include_router(profile, tags=["Profile"])        
-        self.App.include_router(vehicle, tags=["Vehicle"])
-        self.App.include_router(payments, tags=["Payment"])
-        self.App.include_router(billing, tags=["Billing"])
-        self.App.include_router(parking_lots, tags=["Parking Lots"])
-        self.App.include_router(reservations, tags=["Reservations"])
-        self.App.include_router(discounts, tags=["Discounts"])
+        self.App.include_router(account.router, tags=["Account"])
+        self.App.include_router(profile.router, tags=["Profile"])        
+        self.App.include_router(vehicle.router, tags=["Vehicle"])
+        self.App.include_router(payments.router, tags=["Payment"])
+        self.App.include_router(billing.router, tags=["Billing"])
+        self.App.include_router(parking_lots.router, tags=["Parking Lots"])
+        self.App.include_router(reservations.router, tags=["Reservations"])
+        self.App.include_router(discounts.router, tags=["Discounts"])
         
     def SetupRoutes(self) -> None:
 
