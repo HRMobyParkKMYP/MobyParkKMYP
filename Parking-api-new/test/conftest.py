@@ -34,7 +34,10 @@ def get_test_db_path():
 
 def _start_test_api_server(api_dir: str):
     """Start uvicorn in a background thread for integration tests."""
-    # Ensure api directory on sys.path for imports
+    # Ensure api directory and parent directory on sys.path for imports
+    parent_dir = os.path.dirname(api_dir)
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
     if api_dir not in sys.path:
         sys.path.insert(0, api_dir)
 
@@ -125,8 +128,11 @@ def setup_test_environment():
         if setup_script_dir not in sys.path:
             sys.path.insert(0, setup_script_dir)
         
-        # Add API directory to path
+        # Add API directory and parent directory to path
         api_dir = os.path.join(setup_script_dir, '..', 'api')
+        parent_dir = os.path.dirname(os.path.abspath(api_dir))
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
         if api_dir not in sys.path:
             sys.path.insert(0, os.path.abspath(api_dir))
         

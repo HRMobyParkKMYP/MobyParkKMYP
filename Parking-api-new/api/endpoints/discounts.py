@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from utils.session_manager import get_session
 from utils.database_utils import execute_query, get_db_connection
 from models.Discount import Discount
-from .discount_utils import get_discount_by_id
+from utils.discount_utils import get_discount_by_id
 
 router = APIRouter()
 

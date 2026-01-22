@@ -74,3 +74,35 @@ def delete_vehicle(vehicle_id: str, user_id: int) -> bool:
         cursor = conn.cursor()
         cursor.execute(query, (vehicle_id, user_id))
         return cursor.rowcount > 0
+
+
+def get_vehicle_reservations(vehicle_id: str, user_id: int) -> List[Dict[str, Any]]:
+    """Get all reservations for a specific vehicle"""
+    # Query reservations table for this vehicle
+    query = """
+        SELECT r.* FROM reservations r
+        WHERE r.vehicle_id = ? AND r.user_id = ?
+        ORDER BY r.start_time DESC
+    """
+    return execute_query(query, (vehicle_id, user_id))
+
+
+def get_vehicle_history(vehicle_id: str, user_id: int) -> List[Dict[str, Any]]:
+    """Get history for a specific vehicle"""
+    # Query p_sessions (parking sessions) for this vehicle
+    query = """
+        SELECT * FROM p_sessions
+        WHERE vehicle_id = ? AND user_id = ?
+        ORDER BY started_at DESC
+    """
+    return execute_query(query, (vehicle_id, user_id))
+
+
+def get_vehicle_reservations(vehicle_id: str, user_id: int) -> List[Dict[str, Any]]:
+    """Get all reservations for a specific vehicle"""
+    query = """
+        SELECT * FROM reservations 
+        WHERE vehicle_id = ? AND user_id = ?
+        ORDER BY start_time DESC
+    """
+    return execute_query(query, (vehicle_id, user_id))

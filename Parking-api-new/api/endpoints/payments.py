@@ -9,9 +9,10 @@ from utils.payment_utils import (
     get_my_payments_db,
     refund_payment_db,
     get_payment_by_external_ref,
-    get_user_payments_db
+    get_user_payments_db,
+    update_payment_db  
 )
-from discounts.discount_utils import apply_discount_to_payment, get_discount_by_code
+from utils.discount_utils import apply_discount_to_payment, get_discount_by_code
 
 router = APIRouter()
 
@@ -123,11 +124,34 @@ async def complete_payment(
     request: UpdatePaymentRequest,
     authorization: Optional[str] = Header(None, alias="Authorization")
 ):
-    # Keep this alias endpoint as-is (it previously called update_payment)
-    # Logic can later use utils if needed
-    return {"status": "success", "message": "Transaction completed"}
+    user = require_auth(authorization)
+    
+    payment = get_payment_by_external_ref(transaction)
+    if not payment:
+        raise HTTPException(status_code=404, detail="Payment not found")
+    
+    if payment.get("user_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="Unauthorized")
+    
+    success = update_payment_db(
+        external_ref=transaction,
+        status=request.status,
+        paid_at=request.paid_at or datetime.now()
+    )
+    
+    if not success:
+        raise HTTPException(status_code=400, detail="Failed to complete payment")
+    
+    return {"status": "success", "message": "Payment completed"}
 
 @router.get("/payments/{username}")
-async def get_user_payments(username: str):
+async def get_user_payments(username: str, authorization: Optional[str] = Header(None, alias="Authorization")):
+    # Require authentication
+    user = require_auth(authorization)
+    
+    # Only allow ADMIN
+    if user.get("role") != "ADMIN":
+        raise HTTPException(status_code=403, detail="Access denied: Admins only")
+    
     payments = get_user_payments_db(username)
     return payments

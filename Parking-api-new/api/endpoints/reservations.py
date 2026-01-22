@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
 from utils.session_manager import get_session
-from . import reservations_utils as db
+from utils import reservations_utils as db
 
 router = APIRouter()
 
@@ -157,7 +157,7 @@ async def update_reservation(rid: int, data: ReservationUpdateRequest, authoriza
                 )
     
     # Build updated fields
-    update_data = {k: v for k, v in data.dict(exclude_unset=True).items() if v is not None}
+    update_data = {k: v for k, v in data.model_dump(exclude_unset=True).items() if v is not None}
     
     db.update_reservation(rid, update_data)
     
